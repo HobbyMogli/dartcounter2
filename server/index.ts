@@ -131,15 +131,23 @@ app.delete('/api/players/:id', async (req: Request, res: Response): Promise<void
 // POST /api/games - Neues Spiel erstellen
 app.post('/api/games', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { playerId, gameType, startingScore, settings } = req.body;
+    const { playerIds, gameType, startingScore, settings } = req.body;
     const game = await prisma.game.create({
       data: {
         gameType,
-        playerId,
         startTime: new Date(),
         score: startingScore,
-        settings,
-        isFinished: false
+        settings: JSON.stringify(settings),
+        isFinished: false,
+        players: {
+          create: playerIds.map((playerId: number, index: number) => ({
+            playerId,
+            position: index + 1
+          }))
+        }
+      },
+      include: {
+        players: true
       }
     });
     res.json(game);

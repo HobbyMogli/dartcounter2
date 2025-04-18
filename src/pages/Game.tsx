@@ -62,7 +62,7 @@ const Game: React.FC = () => {
 
           // Create a single game for the entire match
           const game = await gameService.createGame({
-            playerId: parseInt(gamePlayers[0].id.toString()),
+            playerIds: gamePlayers.map(player => parseInt(player.id.toString())),
             gameType: gameData.gameMode,
             startingScore: gameData.settings.startScore || 501,
             settings: gameData.settings

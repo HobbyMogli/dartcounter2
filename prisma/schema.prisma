@@ -33,6 +33,7 @@ model Player {
   wonGames         Game[]       @relation("PlayerWonGames")
   gamePlayers      GamePlayer[] @relation("PlayerGamePlayers")
   statistics       PlayerStatistics?
+  wonGamesAsWinner Game[]       @relation("GameWinner")
   
   @@map("players")
 }
@@ -41,24 +42,21 @@ model Player {
 model Game {
   id                Int      @id @default(autoincrement())
   gameType          String
-  playerId          Int
-  player            Player   @relation("PlayerGames", fields: [playerId], references: [id])
-  winnerId          Int?
-  winner            Player?  @relation("PlayerWonGames", fields: [winnerId], references: [id])
   startTime         DateTime @default(now())
   endTime           DateTime?
-  score             Int?
-  dartsThrown       Int?
-  average           Float?
-  checkoutPercentage Float?
+  status            String   @default("ongoing")
+  score             Int      @default(501)
   isFinished        Boolean  @default(false)
-  settings          Json     // Speichert die Spieleinstellungen als JSON
+  settings          String
+  winner            Player?  @relation("GameWinner", fields: [winnerId], references: [id])
+  winnerId          Int?
+  players           GamePlayer[]
   throws            Throw[]
-  gamePlayers       GamePlayer[] @relation("GamePlayers")
   createdAt         DateTime @default(now())
   updatedAt         DateTime? @updatedAt
+  playerGames       Player[]  @relation("PlayerGames")
+  playerWonGames    Player[]  @relation("PlayerWonGames")
 
-  @@index([playerId])
   @@index([winnerId])
   @@map("games")
 }
@@ -66,7 +64,9 @@ model Game {
 // Spieler-Spiel-Verbindung
 model GamePlayer {
   id                Int      @id @default(autoincrement())
+  game             Game     @relation(fields: [gameId], references: [id])
   gameId           Int
+  player           Player   @relation("PlayerGamePlayers", fields: [playerId], references: [id])
   playerId         Int
   position         Int      // Spielerreihenfolge
   finalScore       Int?
@@ -74,10 +74,6 @@ model GamePlayer {
   highestScore     Int      @default(0)
   checkoutPercentage Float   @default(0)
   
-  // Beziehungen
-  game             Game     @relation("GamePlayers", fields: [gameId], references: [id])
-  player           Player   @relation("PlayerGamePlayers", fields: [playerId], references: [id])
-
   @@unique([gameId, playerId])
   @@map("game_players")
 }
@@ -85,10 +81,10 @@ model GamePlayer {
 // Wurf-Modell
 model Throw {
   id            Int      @id @default(autoincrement())
-  gameId        Int
   game          Game     @relation(fields: [gameId], references: [id])
-  playerId      Int
+  gameId        Int
   player        Player   @relation(fields: [playerId], references: [id])
+  playerId      Int
   roundNumber   Int
   dartNumber    Int      // 1, 2 oder 3 für den Wurf in der Runde
   score         Int

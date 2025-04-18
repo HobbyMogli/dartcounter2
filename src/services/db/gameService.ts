@@ -12,7 +12,7 @@ export interface GameState {
 export const gameService = {
   // Neues Spiel erstellen
   async createGame(data: {
-    playerId: number;
+    playerIds: number[];
     gameType: string;
     startingScore: number;
     settings: any; // Die Spieleinstellungen als JSON
