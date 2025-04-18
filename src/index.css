@@ -69,3 +69,63 @@ button {
   opacity: 1;
   visibility: visible;
 }
+
+/* React-Select Custom Styles */
+.react-select-container {
+  @apply text-gray-100;
+}
+
+.react-select__control {
+  @apply bg-dark-700 border-gray-600 hover:border-neon-blue !important;
+}
+
+.react-select__menu {
+  @apply bg-dark-700 border border-gray-600 !important;
+}
+
+.react-select__option {
+  @apply text-gray-100 hover:bg-dark-600 !important;
+}
+
+.react-select__option--is-selected {
+  @apply bg-neon-blue !important;
+}
+
+.react-select__multi-value {
+  @apply bg-dark-600 !important;
+}
+
+.react-select__multi-value__label {
+  @apply text-gray-100 !important;
+}
+
+.react-select__multi-value__remove {
+  @apply text-gray-400 hover:text-white hover:bg-red-500 !important;
+}
+
+.react-select__input-container {
+  @apply text-gray-100 !important;
+}
+
+/* Zusätzliche Tab-Styles */
+.tab-content-enter {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.tab-content-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 200ms, transform 200ms;
+}
+
+.tab-content-exit {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.tab-content-exit-active {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 200ms, transform 200ms;
+}

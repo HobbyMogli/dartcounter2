@@ -49,4 +49,8 @@ export const colors = {
       700: '#242424',     // Erhöhte Komponenten
       600: '#2d2d2d',     // Hover-States
     },
+    darts: {
+      double: '#ffb266',  // Pastelliges Orange für Double
+      triple: '#ff4d00',  // Kräftiges Orange-Rot für Triple
+    },
   };

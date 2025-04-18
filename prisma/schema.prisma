@@ -17,9 +17,10 @@ datasource db {
 // Spieler-Modell
 model Player {
   id                Int          @id @default(autoincrement())
-  name             String
+  name             String      @unique
   nickname         String?
-  createdAt        DateTime     @default(now())
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime?   @updatedAt
   gamesPlayed      Int          @default(0)
   gamesWon         Int          @default(0)
   averageScore     Float        @default(0)
@@ -27,32 +28,38 @@ model Player {
   checkoutPercentage Float       @default(0)
   favoriteDouble   Int?
   profileImage     String?
-  
-  // Beziehungen
-  gamePlayers      GamePlayer[]
+  games            Game[]       @relation("PlayerGames")
   throws           Throw[]
-  wonGames         Game[]
-
+  wonGames         Game[]       @relation("PlayerWonGames")
+  gamePlayers      GamePlayer[] @relation("PlayerGamePlayers")
+  statistics       PlayerStatistics?
+  
   @@map("players")
 }
 
 // Spiel-Modell
 model Game {
-  id        Int       @id @default(autoincrement())
-  gameType  String    // 'X01' | 'Cricket' | 'AroundTheWorld' | 'Shanghai'
-  startTime DateTime  @default(now())
-  endTime   DateTime?
-  status    String    @default("ongoing") // 'ongoing' | 'completed' | 'abandoned'
-  winnerId  Int?
-  
-  // Spieleinstellungen als JSON
-  settings  String    // JSON string für flexible Einstellungen
-  
-  // Beziehungen
-  gamePlayers GamePlayer[]
-  throws      Throw[]
-  winner      Player?     @relation(fields: [winnerId], references: [id])
+  id                Int      @id @default(autoincrement())
+  gameType          String
+  playerId          Int
+  player            Player   @relation("PlayerGames", fields: [playerId], references: [id])
+  winnerId          Int?
+  winner            Player?  @relation("PlayerWonGames", fields: [winnerId], references: [id])
+  startTime         DateTime @default(now())
+  endTime           DateTime?
+  score             Int?
+  dartsThrown       Int?
+  average           Float?
+  checkoutPercentage Float?
+  isFinished        Boolean  @default(false)
+  settings          Json     // Speichert die Spieleinstellungen als JSON
+  throws            Throw[]
+  gamePlayers       GamePlayer[] @relation("GamePlayers")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime? @updatedAt
 
+  @@index([playerId])
+  @@index([winnerId])
   @@map("games")
 }
 
@@ -68,8 +75,8 @@ model GamePlayer {
   checkoutPercentage Float   @default(0)
   
   // Beziehungen
-  game             Game     @relation(fields: [gameId], references: [id])
-  player           Player   @relation(fields: [playerId], references: [id])
+  game             Game     @relation("GamePlayers", fields: [gameId], references: [id])
+  player           Player   @relation("PlayerGamePlayers", fields: [playerId], references: [id])
 
   @@unique([gameId, playerId])
   @@map("game_players")
@@ -77,20 +84,33 @@ model GamePlayer {
 
 // Wurf-Modell
 model Throw {
-  id             Int      @id @default(autoincrement())
-  gameId         Int
-  playerId       Int
-  round          Int
-  throwNumber    Int      // 1 | 2 | 3
-  segment        Int
-  multiplier     Int      // 1 | 2 | 3
-  score          Int
-  remainingScore Int
-  timestamp      DateTime @default(now())
-  
-  // Beziehungen
-  game           Game     @relation(fields: [gameId], references: [id])
-  player         Player   @relation(fields: [playerId], references: [id])
+  id            Int      @id @default(autoincrement())
+  gameId        Int
+  game          Game     @relation(fields: [gameId], references: [id])
+  playerId      Int
+  player        Player   @relation(fields: [playerId], references: [id])
+  roundNumber   Int
+  dartNumber    Int      // 1, 2 oder 3 für den Wurf in der Runde
+  score         Int
+  multiplier    Int      // 1, 2 oder 3
+  targetNumber  Int?     // Welche Zahl wurde getroffen
+  isBull        Boolean  // War es ein Bull?
+  createdAt     DateTime @default(now())
 
+  @@index([gameId])
+  @@index([playerId])
   @@map("throws")
+}
+
+model PlayerStatistics {
+  id                Int      @id @default(autoincrement())
+  playerId          Int      @unique
+  player            Player   @relation(fields: [playerId], references: [id])
+  gamesPlayed       Int      @default(0)
+  gamesWon          Int      @default(0)
+  highestCheckout   Int      @default(0)
+  average           Float    @default(0)
+  checkoutPercentage Float   @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime? @updatedAt
 }
