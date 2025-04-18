@@ -1,49 +1,36 @@
 import type { PrismaClient } from '@prisma/client';
-import prisma from './prisma';
-
-type GameCreateInput = {
-  gameType: string;
-  settings: Record<string, any>;
-  players: { id: number; position: number; }[];
-};
-
-type ThrowCreateInput = {
-  gameId: number;
-  playerId: number;
-  round: number;
-  throwNumber: number;
-  segment: number;
-  multiplier: number;
-  score: number;
-  remainingScore: number;
-};
+import { prisma } from './prisma';
 
 export const gameService = {
   // Neues Spiel erstellen
-  async createGame(data: GameCreateInput) {
+  async createGame(data: {
+    playerIds: number[];
+    gameType: string;
+    startingScore: number;
+  }) {
     return prisma.$transaction(async (prismaClient: PrismaClient) => {
-      // Spiel erstellen
       const game = await prismaClient.game.create({
         data: {
           gameType: data.gameType,
-          settings: JSON.stringify(data.settings),
+          startingScore: data.startingScore,
+          status: 'IN_PROGRESS',
+          players: {
+            create: data.playerIds.map(playerId => ({
+              player: {
+                connect: { id: playerId }
+              }
+            }))
+          }
+        },
+        include: {
+          players: {
+            include: {
+              player: true
+            }
+          }
         }
       });
-
-      // Spieler zum Spiel hinzufügen
-      const gamePlayers = await Promise.all(
-        data.players.map(player =>
-          prismaClient.gamePlayer.create({
-            data: {
-              gameId: game.id,
-              playerId: player.id,
-              position: player.position
-            }
-          })
-        )
-      );
-
-      return { ...game, gamePlayers };
+      return game;
     });
   },
 
@@ -52,7 +39,7 @@ export const gameService = {
     return prisma.game.findUnique({
       where: { id },
       include: {
-        gamePlayers: {
+        players: {
           include: {
             player: true
           }
@@ -64,9 +51,21 @@ export const gameService = {
   },
 
   // Wurf registrieren
-  async registerThrow(data: ThrowCreateInput) {
+  async registerThrow(data: {
+    gameId: number;
+    playerId: number;
+    score: number;
+    multiplier: number;
+    sector: number;
+  }) {
     return prisma.throw.create({
-      data
+      data: {
+        gameId: data.gameId,
+        playerId: data.playerId,
+        score: data.score,
+        multiplier: data.multiplier,
+        sector: data.sector
+      }
     });
   }
 };

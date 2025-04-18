@@ -1,3 +1,4 @@
+/* tailwind directives */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -38,4 +39,33 @@ body {
 /* We'll handle button styles through Tailwind classes instead */
 button {
   cursor: pointer;
+}
+
+/* Tooltip Styles */
+.tooltip {
+  position: relative;
+}
+
+.tooltip::before {
+  content: attr(aria-label);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  font-size: 12px;
+  white-space: nowrap;
+  border-radius: 4px;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
+  pointer-events: none;
+  margin-bottom: 5px;
+}
+
+.tooltip:hover::before {
+  opacity: 1;
+  visibility: visible;
 }

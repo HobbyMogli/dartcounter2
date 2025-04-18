@@ -9,6 +9,11 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   size?: ButtonSize;
   fullWidth?: boolean;
   isLoading?: boolean;
+  icon?: React.ReactNode;
+  type?: 'button' | 'submit';
+  children?: React.ReactNode;
+  onClick?: () => void;
+  'aria-label'?: string;
 }
 
 const variantStyles: Record<ButtonVariant, string> = {
@@ -31,22 +36,32 @@ export const Button: React.FC<ButtonProps> = ({
   className,
   children,
   disabled,
-  ...props
+  icon,
+  type = 'button',
+  onClick,
+  'aria-label': ariaLabel
 }) => {
+  const baseStyles = 'rounded-md font-medium focus:outline-none';
+  
+  const disabledStyles = disabled ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105';
+
   return (
     <button
+      type={type}
       className={classNames(
-        'rounded-md font-medium focus:outline-none',
+        baseStyles,
         variantStyles[variant],
         sizeStyles[size],
         fullWidth ? 'w-full' : '',
         isLoading ? 'opacity-75 cursor-not-allowed' : '',
-        disabled ? 'opacity-50 cursor-not-allowed' : '',
+        disabledStyles,
         className
       )}
       disabled={disabled || isLoading}
-      {...props}
+      onClick={onClick}
+      aria-label={ariaLabel}
     >
+      {icon && <span className="w-4 h-4">{icon}</span>}
       {isLoading ? (
         <span className="flex items-center justify-center">
           <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
