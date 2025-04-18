@@ -1,23 +1,36 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { Button, Card } from '../components/common';
 
 const Home: React.FC = () => {
   return (
     <div className="text-center">
-      <h1 className="text-4xl font-bold text-gray-900 mb-8">
-        Willkommen bei DartCounter
-      </h1>
-      <div className="space-y-4">
-        <p className="text-xl text-gray-600">
-          Wählen Sie einen Spielmodus und starten Sie Ihr Dart-Abenteuer!
-        </p>
-        <Link
-          to="/setup"
-          className="inline-block bg-primary-600 text-white px-6 py-3 rounded-lg hover:bg-primary-700"
-        >
-          Neues Spiel starten
-        </Link>
-      </div>
+      <Card 
+        className="max-w-2xl mx-auto" 
+        glowEffect="blue"
+      >
+        <h1 className="text-4xl font-bold text-neon-blue mb-8">
+          Willkommen bei DartCounter
+        </h1>
+        <div className="space-y-6">
+          <p className="text-xl text-gray-300">
+            Wählen Sie einen Spielmodus und starten Sie Ihr Dart-Abenteuer!
+          </p>
+          <div className="space-x-4">
+            <Link to="/setup">
+              <Button variant="priority" size="lg">
+                Neues Spiel starten
+              </Button>
+            </Link>
+            <Button variant="secondary" size="lg">
+              Tutorial
+            </Button>
+            <Button variant="danger" size="lg">
+              Zurücksetzen
+            </Button>
+          </div>
+        </div>
+      </Card>
     </div>
   );
 };
