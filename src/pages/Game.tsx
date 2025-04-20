@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useLocation, Navigate, useNavigate } from 'react-router-dom';
 import type { GameSetupData } from '../types/gameTypes';
 import PlayerScoreCard from '../components/game/PlayerScoreCard';
@@ -52,6 +52,10 @@ const Game: React.FC = () => {
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
   const [winner, setWinner] = useState<PlayerGameState | null>(null);
+  const [gameSaved, setGameSaved] = useState(false);
+
+  // Ref hinzufügen, um doppelte Initialisierung zu verhindern
+  const initialized = useRef(false);
 
   // Add a new state for tracking game actions (throws and undos)
   const [gameLog, setGameLog] = useState<Array<{
@@ -76,6 +80,12 @@ const Game: React.FC = () => {
   }, [settings.showDebugInfo]);
 
   useEffect(() => {
+    // Prüfe, ob die Initialisierung bereits erfolgte
+    if (initialized.current) {
+      return;
+    }
+    initialized.current = true; // Setze Flag, dass Initialisierung gestartet wurde
+
     const initializeGame = async () => {
       if (gameData?.players) {
         try {
@@ -98,6 +108,7 @@ const Game: React.FC = () => {
           setPlayers(gamePlayers);
 
           // Create a single game for the entire match
+          console.log("[Game] Attempting to create game..."); // Log vor Erstellung
           const game = await gameService.createGame({
             playerIds: gamePlayers.map(player => parseInt(player.id.toString())),
             gameType: gameData.gameMode,
@@ -110,13 +121,8 @@ const Game: React.FC = () => {
           setPlayers(gamePlayers);
           setIsLoading(false);
           
-          // We'll initialize the player stats and throws later once all functions are defined
-          // Just set a flag to do this when the component is fully initialized
           if (game.id) {
-            console.log(`[Game] Game created with ID ${game.id}`);
-            
-            // We'll initialize the displays during the first render after loading
-            // This avoids calling functions before they're defined
+            console.log(`[Game] Game successfully created with ID ${game.id}`);
           }
         } catch (error) {
           console.error('Fehler beim Initialisieren des Spiels:', error);
@@ -871,9 +877,10 @@ const Game: React.FC = () => {
       
       // Get the most up-to-date player data for the winner
       const currentWinnerIndex = activePlayerIndex;
+      const currentWinner = players[currentWinnerIndex];
       const currentWinnerData = await gameService.getPlayerStats(
         gameId, 
-        parseInt(players[currentWinnerIndex].id.toString())
+        parseInt(currentWinner.id.toString())
       );
       
       // Create updated winner object with latest stats
@@ -891,19 +898,31 @@ const Game: React.FC = () => {
       setWinner(updatedWinner);
       setIsGameOver(true);
       
-      // Berechne die Gesamtzahl der geworfenen Darts
-      const totalDartsThrown = players.reduce(
-        (sum, player) => sum + player.gameStats.dartsThrown, 
-        0
-      );
-      
-      // Beende das Spiel in der Datenbank
-      await gameService.endGame(gameId, score, totalDartsThrown);
-      
-      // Hier können weitere Aktionen für das Spielende hinzugefügt werden
+      // Don't automatically save the game, let the user do it explicitly
       console.log('Game ended with score:', score);
     } catch (error) {
       console.error('Error ending game:', error);
+    }
+  };
+
+  // New function to explicitly save the game
+  const saveGameToDatabase = async () => {
+    if (!gameId || !winner) return;
+    
+    try {
+      // Set the winner ID and end the game in the database
+      const winnerId = parseInt(winner.id.toString());
+      await gameService.setGameWinner(gameId, winnerId);
+      await gameService.endGame(gameId, winner.currentScore);
+      
+      // Mark the game as saved
+      setGameSaved(true);
+      toast.success('Game saved successfully!');
+      
+      console.log('Game saved to database');
+    } catch (error) {
+      console.error('Error saving game:', error);
+      toast.error('Failed to save game');
     }
   };
 
@@ -1016,6 +1035,25 @@ const Game: React.FC = () => {
                 <span>{winner.gameStats.highestThrow}</span>
               </div>
             </div>
+            
+            {!gameSaved ? (
+              <div className="mb-4">
+                <button 
+                  onClick={saveGameToDatabase}
+                  className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 w-full mb-4"
+                >
+                  Spiel speichern
+                </button>
+                <p className="text-yellow-400 text-sm">Speichere das Spiel, um die Spielerstatistiken zu aktualisieren.</p>
+              </div>
+            ) : (
+              <div className="mb-4">
+                <p className="text-green-400 mb-4">
+                  ✓ Spiel gespeichert
+                </p>
+              </div>
+            )}
+            
             <div className="flex justify-center space-x-4">
               <button 
                 onClick={() => window.location.reload()}

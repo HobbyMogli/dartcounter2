@@ -219,21 +219,247 @@ app.get('/api/throws/:id', async (req: Request, res: Response): Promise<void> =>
 app.post('/api/games/:id/end', async (req: Request, res: Response): Promise<void> => {
   try {
     const gameId = parseInt(req.params.id);
-    const { finalScore, dartsThrown } = req.body;
+    const { finalScore } = req.body;
     const game = await prisma.game.update({
       where: { id: gameId },
       data: {
         endTime: new Date(),
         score: finalScore,
-        dartsThrown: dartsThrown,
-        average: dartsThrown > 0 ? (finalScore / dartsThrown) * 3 : 0,
         isFinished: true
       }
     });
+    
+    // Update player statistics for all players in the game
+    await updatePlayerStatisticsForGame(gameId);
+    
     res.json(game);
   } catch (error) {
     console.error('Error ending game:', error);
     res.status(500).json({ error: 'Could not end game' });
+  }
+});
+
+// PUT /api/games/:id/winner - Set the winner of a game
+app.put('/api/games/:id/winner', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const gameId = parseInt(req.params.id);
+    const { winnerId } = req.body;
+    
+    // Update the game with the winner ID
+    const game = await prisma.game.update({
+      where: { id: gameId },
+      data: {
+        winnerId
+      }
+    });
+    
+    console.log(`[setGameWinner] Set winner ${winnerId} for game ${gameId}`);
+    res.json(game);
+  } catch (error) {
+    console.error('Error setting game winner:', error);
+    res.status(500).json({ error: 'Could not set game winner' });
+  }
+});
+
+// Function to update player statistics when a game ends
+async function updatePlayerStatisticsForGame(gameId: number) {
+  try {
+    // Get the game with all related data
+    const game = await prisma.game.findUnique({
+      where: { id: gameId },
+      include: {
+        players: {
+          include: {
+            player: true
+          }
+        },
+        throws: {
+          orderBy: [
+            { roundNumber: 'asc' },
+            { dartNumber: 'asc' }
+          ]
+        }
+      }
+    });
+
+    if (!game || !game.isFinished) {
+      console.log(`[updatePlayerStats] Game ${gameId} not found or not finished`);
+      return;
+    }
+
+    console.log(`[updatePlayerStats] Updating statistics for game ${gameId}`);
+
+    // Get the winner if available
+    const winnerId = game.winnerId;
+
+    // Group throws by player
+    const playerThrows = new Map<number, any[]>();
+    game.throws.forEach(throwData => {
+      if (!throwData.busted) { // Only consider valid throws
+        if (!playerThrows.has(throwData.playerId)) {
+          playerThrows.set(throwData.playerId, []);
+        }
+        playerThrows.get(throwData.playerId)?.push(throwData);
+      }
+    });
+
+    // Process each player
+    for (const gamePlayer of game.players) {
+      const playerId = gamePlayer.playerId;
+      const player = gamePlayer.player;
+      const playerThrowList = playerThrows.get(playerId) || [];
+      
+      // Count complete rounds (sets of 3 throws)
+      const rounds = new Map<number, any[]>();
+      playerThrowList.forEach(t => {
+        if (!rounds.has(t.roundNumber)) {
+          rounds.set(t.roundNumber, []);
+        }
+        rounds.get(t.roundNumber)?.push(t);
+      });
+      
+      // Calculate statistics
+      let completeRounds = 0;
+      let totalPointsInCompleteRounds = 0;
+      let highestRoundScore = 0;
+      let checkoutOpportunities = 0;
+      let successfulCheckouts = 0;
+      const doubleCounts = new Map<number, number>();
+      
+      // Count total rounds and analyze throws
+      rounds.forEach((roundThrows, roundNum) => {
+        if (roundThrows.length === 3) {
+          completeRounds++;
+          const roundScore = roundThrows.reduce((sum, t) => sum + t.score, 0);
+          totalPointsInCompleteRounds += roundScore;
+          
+          if (roundScore > highestRoundScore) {
+            highestRoundScore = roundScore;
+          }
+          
+          // Check for checkout opportunities and successful checkouts
+          const lastThrow = roundThrows[roundThrows.length - 1];
+          
+          // If double-out rule and the throw was a double
+          if (game.settings.includes('"checkOut":"double"') && lastThrow.multiplier === 2) {
+            // Check if this was a checkout throw
+            const targetNumber = lastThrow.targetNumber || (lastThrow.score / lastThrow.multiplier);
+            doubleCounts.set(targetNumber, (doubleCounts.get(targetNumber) || 0) + 1);
+            
+            // If game ended with this throw, it was a successful checkout
+            if (winnerId === playerId) {
+              successfulCheckouts++;
+            }
+          }
+          
+          // Check if it was a checkout opportunity
+          // (this is a simplification - we'd need to know the score before the throw to be more accurate)
+          if (lastThrow.score <= 50 && lastThrow.multiplier === 2) { // Assuming 50 is maximum checkout
+            checkoutOpportunities++;
+          }
+        }
+      });
+      
+      // Find the favorite double
+      let favoriteDouble: number | null = null;
+      let maxCount = 0;
+      doubleCounts.forEach((count, number) => {
+        if (count > maxCount) {
+          maxCount = count;
+          favoriteDouble = number;
+        }
+      });
+      
+      // Calculate 3-dart average
+      const threeDartAverage = completeRounds > 0 
+        ? totalPointsInCompleteRounds / completeRounds 
+        : 0;
+      
+      // Calculate checkout percentage
+      const checkoutPercentage = checkoutOpportunities > 0 
+        ? (successfulCheckouts / checkoutOpportunities) * 100 
+        : 0;
+      
+      // Get existing player stats
+      const existingPlayer = await prisma.player.findUnique({
+        where: { id: playerId }
+      });
+      
+      if (!existingPlayer) {
+        console.log(`[updatePlayerStats] Player ${playerId} not found, skipping`);
+        continue;
+      }
+      
+      // Update player statistics
+      const updatedPlayer = await prisma.player.update({
+        where: { id: playerId },
+        data: {
+          gamesPlayed: existingPlayer.gamesPlayed + 1,
+          gamesWon: winnerId === playerId ? existingPlayer.gamesWon + 1 : existingPlayer.gamesWon,
+          // Update average score as a weighted average of old and new
+          averageScore: existingPlayer.gamesPlayed > 0 
+            ? ((existingPlayer.averageScore * existingPlayer.gamesPlayed) + threeDartAverage) / (existingPlayer.gamesPlayed + 1)
+            : threeDartAverage,
+          // Update highest score if new is higher
+          highestScore: Math.max(existingPlayer.highestScore, highestRoundScore),
+          // Update checkout percentage as weighted average
+          checkoutPercentage: existingPlayer.gamesPlayed > 0
+            ? ((existingPlayer.checkoutPercentage * existingPlayer.gamesPlayed) + checkoutPercentage) / (existingPlayer.gamesPlayed + 1)
+            : checkoutPercentage,
+          // Update favorite double if we found one
+          favoriteDouble: favoriteDouble !== null ? favoriteDouble : existingPlayer.favoriteDouble
+        }
+      });
+      
+      console.log(`[updatePlayerStats] Updated stats for player ${playerId}:`, {
+        gamesPlayed: updatedPlayer.gamesPlayed,
+        gamesWon: updatedPlayer.gamesWon,
+        averageScore: updatedPlayer.averageScore,
+        highestScore: updatedPlayer.highestScore,
+        checkoutPercentage: updatedPlayer.checkoutPercentage,
+        favoriteDouble: updatedPlayer.favoriteDouble
+      });
+    }
+    
+    console.log(`[updatePlayerStats] Completed updating player statistics for game ${gameId}`);
+  } catch (error) {
+    console.error('[updatePlayerStats] Error updating player statistics:', error);
+  }
+}
+
+// PUT /api/players/:id/statistics - Update player statistics
+app.put('/api/players/:id/statistics', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const playerId = parseInt(req.params.id);
+    const statistics = req.body;
+    
+    // Find the player
+    const player = await prisma.player.findUnique({
+      where: { id: playerId }
+    });
+    
+    if (!player) {
+      res.status(404).json({ error: 'Player not found' });
+      return;
+    }
+    
+    // Update player with new statistics
+    const updatedPlayer = await prisma.player.update({
+      where: { id: playerId },
+      data: {
+        gamesPlayed: statistics.gamesPlayed ?? player.gamesPlayed,
+        gamesWon: statistics.gamesWon ?? player.gamesWon,
+        averageScore: statistics.averageScore ?? player.averageScore,
+        highestScore: statistics.highestScore ?? player.highestScore,
+        checkoutPercentage: statistics.checkoutPercentage ?? player.checkoutPercentage,
+        favoriteDouble: statistics.favoriteDouble ?? player.favoriteDouble
+      }
+    });
+    
+    res.json(updatedPlayer);
+  } catch (error) {
+    console.error('Error updating player statistics:', error);
+    res.status(500).json({ error: 'Could not update player statistics' });
   }
 });
 

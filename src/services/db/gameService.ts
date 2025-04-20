@@ -103,20 +103,37 @@ export const gameService = {
   },
 
   // Spiel beenden
-  async endGame(gameId: number, finalScore: number, dartsThrown: number) {
+  async endGame(gameId: number, finalScore: number) {
     const response = await fetch(`${API_URL}/games/${gameId}/end`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        finalScore,
-        dartsThrown
+        finalScore
       })
     });
     
     if (!response.ok) {
       throw new Error('Failed to end game');
+    }
+    return response.json();
+  },
+
+  // Set the winner of a game
+  async setGameWinner(gameId: number, winnerId: number) {
+    const response = await fetch(`${API_URL}/games/${gameId}/winner`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        winnerId
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to set game winner');
     }
     return response.json();
   },
