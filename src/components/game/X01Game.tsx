@@ -1,29 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { DartKeypad } from './DartKeypad';
 import { useSettings } from '../../contexts/SettingsContext';
 
 interface X01GameProps {
-  currentScore: number; // Aktueller Punktestand des aktiven Spielers
+  currentScore: number;
   onGameEnd: (score: number) => void;
   onThrow?: (score: number, multiplier: number, targetNumber?: number, isBull?: boolean) => void;
   onUndo?: () => void;
+  gameSettings?: {
+    checkOut: 'straight' | 'double' | 'triple';
+  };
 }
 
 export const X01Game: React.FC<X01GameProps> = ({
   currentScore,
   onGameEnd,
   onThrow,
-  onUndo: parentOnUndo
+  onUndo: parentOnUndo,
+  gameSettings
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const settings = useSettings();
-
-  // Überprüfe, ob das Spiel beendet ist, wenn sich currentScore ändert
-  useEffect(() => {
-    if (currentScore === 0) {
-      onGameEnd(currentScore);
-    }
-  }, [currentScore, onGameEnd]);
 
   const handleScore = async (score: number, multiplier: number, targetNumber?: number, isBull?: boolean) => {
     if (isProcessing) return;
@@ -31,6 +28,7 @@ export const X01Game: React.FC<X01GameProps> = ({
 
     try {
       // Notify parent component about the throw
+      // The parent component will handle all validation and game logic
       if (onThrow) {
         onThrow(score, multiplier, targetNumber, isBull);
       }

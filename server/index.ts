@@ -194,6 +194,27 @@ app.delete('/api/throws/:id', async (req: Request, res: Response): Promise<void>
   }
 });
 
+// GET /api/throws/:id - Get throw details
+app.get('/api/throws/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const throwId = parseInt(req.params.id);
+    const throwData = await prisma.throw.findUnique({
+      where: { id: throwId }
+    });
+    
+    if (!throwData) {
+      res.status(404).json({ error: 'Throw not found' });
+      return;
+    }
+    
+    console.log(`[get-throw] Retrieved throw ID ${throwId}:`, throwData);
+    res.json(throwData);
+  } catch (error) {
+    console.error('Error getting throw:', error);
+    res.status(500).json({ error: 'Could not get throw' });
+  }
+});
+
 // POST /api/games/:id/end - Spiel beenden
 app.post('/api/games/:id/end', async (req: Request, res: Response): Promise<void> => {
   try {
@@ -257,7 +278,8 @@ app.get('/api/games/:gameId/player-stats/:playerId', async (req: Request, res: R
     const throws = await prisma.throw.findMany({
       where: {
         gameId,
-        playerId
+        playerId,
+        busted: false // Only count non-busted throws
       },
       orderBy: [
         { roundNumber: 'asc' },
@@ -352,7 +374,7 @@ app.get('/api/games/:gameId/player-throws/:playerId', async (req: Request, res: 
     
     // NEW: Check if fallback is disabled (client wants empty fields instead of previous round's throws)
     const disableFallback = req.query.disableFallback === 'true';
-    console.log(`[player-throws] Fallback ${disableFallback ? 'disabled' : 'enabled'} for request`);
+    console.log(`[player-throws] Fallback ${disableFallback ? 'DISABLED' : 'enabled'} for request - client wants ${disableFallback ? 'ONLY current round throws' : 'complete display with fallback'}`);
     
     // If no specific round is requested, get the most recent round
     let targetRound = roundParam;
@@ -399,7 +421,24 @@ app.get('/api/games/:gameId/player-throws/:playerId', async (req: Request, res: 
     });
     
     console.log(`[player-throws] All throws for this player:`, 
-      allPlayerThrows.map(t => ({ round: t.roundNumber, dart: t.dartNumber, score: t.score })));
+      allPlayerThrows.map(t => ({ 
+        round: t.roundNumber, 
+        dart: t.dartNumber, 
+        score: t.score,
+        busted: t.busted 
+      })));
+    
+    // Count busted throws for this round
+    const bustedThrowCount = await prisma.throw.count({
+      where: {
+        gameId,
+        playerId,
+        roundNumber: targetRound,
+        busted: true
+      }
+    });
+    
+    console.log(`[player-throws] Found ${bustedThrowCount} busted throws in round ${targetRound}`);
     
     // FALLBACK LOGIC: If there are no throws in the requested round,
     // find the player's most recent round with throws UNLESS fallback is disabled
@@ -442,7 +481,7 @@ app.get('/api/games/:gameId/player-throws/:playerId', async (req: Request, res: 
         });
         
         console.log(`[player-throws] Using throws from round ${effectiveRound} as fallback:`,
-          roundThrows.map(t => ({ dart: t.dartNumber, score: t.score })));
+          roundThrows.map(t => ({ dart: t.dartNumber, score: t.score, busted: t.busted })));
       }
     } else {
       // If fallback is disabled and there are no throws, we'll return empty throws
@@ -465,24 +504,33 @@ app.get('/api/games/:gameId/player-throws/:playerId', async (req: Request, res: 
         });
 
         console.log(`[player-throws] Found ${roundThrows.length} throws for EXACT round ${targetRound}:`, 
-          roundThrows.map(t => ({ dart: t.dartNumber, score: t.score, round: t.roundNumber })));
+          roundThrows.map(t => ({ dart: t.dartNumber, score: t.score, round: t.roundNumber, busted: t.busted })));
       }
     }
 
     // Create an array with 3 positions (for dart 1, 2, 3)
-    const formattedThrows = [null, null, null];
+    const formattedThrows: (number | null)[] = [null, null, null];
     
-    // Fill the throws in the correct position
+    // Ensure throws are positioned correctly in the array based on their dartNumber
     if (roundThrows && roundThrows.length > 0) {
       // First clear any previous data to ensure no old data appears
       formattedThrows.fill(null);
       
-      // Then add only the throws that exist for the effective round
-      roundThrows.forEach(throw_ => {
+      // Then add the throws in the correct positions based on dartNumber
+      for (const throw_ of roundThrows) {
+        // Make sure we only process valid dart numbers (1, 2, or 3)
         if (throw_.dartNumber >= 1 && throw_.dartNumber <= 3) {
-          formattedThrows[throw_.dartNumber - 1] = throw_.score;
+          // Position in array is dartNumber - 1 (so dart 1 goes in position 0)
+          const arrayPosition = throw_.dartNumber - 1;
+          
+          // If busted, store negative value to indicate bust
+          if (throw_.busted) {
+            formattedThrows[arrayPosition] = throw_.score * -1;
+          } else {
+            formattedThrows[arrayPosition] = throw_.score;
+          }
         }
-      });
+      }
     }
 
     // Calculate if we have any throws at all for this player
@@ -513,17 +561,25 @@ app.get('/api/games/:gameId/player-throws/:playerId', async (req: Request, res: 
       hasThrows: roundThrows?.length > 0,
       effectiveRound: effectiveRound, // Added to response to inform client which round's data we're showing
       usedFallback, // Added to indicate if we fell back to a previous round
+      hasBustedThrows: bustedThrowCount > 0, // Add flag showing if there are busted throws
+      bustedThrowCount: bustedThrowCount, // Add count of busted throws
       debug: {
         requestedRound: roundParam,
         targetRound,
         effectiveRound,
         throwCount,
         throwsFound: roundThrows?.length || 0,
+        bustedThrowCount,
         hasAnyThrows,
         disableFallback,
         usedFallback,
         allRounds: allPlayerThrows.map(t => t.roundNumber).filter((v, i, a) => a.indexOf(v) === i), // Unique rounds
-        roundThrows: roundThrows?.map(t => ({ dart: t.dartNumber, score: t.score, round: t.roundNumber })) || []
+        roundThrows: roundThrows?.map(t => ({ 
+          dart: t.dartNumber, 
+          score: t.score, 
+          round: t.roundNumber,
+          busted: t.busted 
+        })) || []
       }
     });
   } catch (error) {
@@ -536,6 +592,168 @@ app.get('/api/games/:gameId/player-throws/:playerId', async (req: Request, res: 
       isRoundComplete: false,
       hasThrows: false
     });
+  }
+});
+
+// POST /api/games/:gameId/mark-round-busted - Mark all throws in a round as busted
+app.post('/api/games/:gameId/mark-round-busted', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const gameId = parseInt(req.params.gameId);
+    const { playerId, roundNumber } = req.body;
+    
+    console.log(`[mark-round-busted] Marking throws as busted for player ${playerId} in round ${roundNumber}`);
+    
+    // Find all throws for this player in this round
+    const throws = await prisma.throw.findMany({
+      where: {
+        gameId,
+        playerId,
+        roundNumber
+      }
+    });
+
+    console.log(`[mark-round-busted] Found ${throws.length} throws to mark as busted:`, 
+      throws.map(t => ({ id: t.id, dart: t.dartNumber, score: t.score, busted: t.busted })));
+
+    // Mark all throws as busted
+    const updates: typeof throws = [];
+    for (const throwData of throws) {
+      console.log(`[mark-round-busted] Marking throw ID ${throwData.id} (dart ${throwData.dartNumber}, score ${throwData.score}) as busted`);
+      
+      if (!throwData.busted) {
+        const update = await prisma.throw.update({
+          where: { id: throwData.id },
+          data: { busted: true }
+        });
+        updates.push(update);
+        console.log(`[mark-round-busted] Successfully marked throw ID ${throwData.id} as busted`);
+      } else {
+        console.log(`[mark-round-busted] Throw ID ${throwData.id} already busted, skipping`);
+      }
+    }
+
+    // Return the updated throws
+    const updatedThrows = await prisma.throw.findMany({
+      where: {
+        gameId,
+        playerId,
+        roundNumber
+      }
+    });
+
+    console.log(`[mark-round-busted] Marked ${updates.length} throws as busted`);
+
+    res.json({ 
+      success: true, 
+      throws: updatedThrows,
+      message: `Marked ${updates.length} throws as busted for player ${playerId} in round ${roundNumber}`,
+      updatesApplied: updates.length
+    });
+  } catch (error) {
+    console.error('Error marking throws as busted:', error);
+    res.status(500).json({ error: 'Could not mark throws as busted' });
+  }
+});
+
+// POST /api/games/:gameId/unmark-round-busted - Restore all throws in a round from busted to normal state
+app.post('/api/games/:gameId/unmark-round-busted', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const gameId = parseInt(req.params.gameId);
+    const { playerId, roundNumber } = req.body;
+    
+    console.log(`[unmark-round-busted] Restoring throws for player ${playerId} in round ${roundNumber}`);
+    
+    // Find all throws for this player in this round
+    const throws = await prisma.throw.findMany({
+      where: {
+        gameId,
+        playerId,
+        roundNumber
+      }
+    });
+
+    console.log(`[unmark-round-busted] Found ${throws.length} throws to restore:`, 
+      throws.map(t => ({ id: t.id, dart: t.dartNumber, score: t.score, busted: t.busted })));
+
+    // CRITICAL FIX: If no throws were found to restore, log this clearly
+    if (throws.length === 0) {
+      console.error(`[unmark-round-busted] NO THROWS FOUND for player ${playerId} in round ${roundNumber}. Nothing to restore!`);
+      res.json({ 
+        success: false, 
+        message: `No throws found for player ${playerId} in round ${roundNumber}`,
+        updatesApplied: 0
+      });
+      return;
+    }
+
+    // Try a more direct SQL approach to ensure updates are happening
+    try {
+      // Use Prisma's executeRaw for a direct SQL update as a backup method
+      const result = await prisma.$executeRaw`
+        UPDATE "Throw"
+        SET "busted" = false
+        WHERE "gameId" = ${gameId} 
+        AND "playerId" = ${playerId} 
+        AND "roundNumber" = ${roundNumber}
+      `;
+      console.log(`[unmark-round-busted] DIRECT SQL UPDATE affected ${result} rows`);
+    } catch (sqlError) {
+      console.error('[unmark-round-busted] Error with direct SQL update:', sqlError);
+    }
+
+    // Mark all throws as NOT busted using Prisma's update
+    const updates: typeof throws = [];
+    for (const throwData of throws) {
+      console.log(`[unmark-round-busted] Restoring throw ID ${throwData.id} (dart ${throwData.dartNumber}, score ${throwData.score}, was busted: ${throwData.busted})`);
+      
+      if (throwData.busted) {
+        try {
+          const update = await prisma.throw.update({
+            where: { id: throwData.id },
+            data: { busted: false }
+          });
+          updates.push(update);
+          console.log(`[unmark-round-busted] Successfully restored throw ID ${throwData.id}`);
+        } catch (updateError) {
+          console.error(`[unmark-round-busted] ERROR updating throw ID ${throwData.id}:`, updateError);
+        }
+      } else {
+        console.log(`[unmark-round-busted] Throw ID ${throwData.id} was not busted, skipping`);
+      }
+    }
+
+    // Verify the changes were actually made by re-fetching
+    const verifiedThrows = await prisma.throw.findMany({
+      where: {
+        gameId,
+        playerId,
+        roundNumber
+      }
+    });
+    
+    console.log(`[unmark-round-busted] VERIFICATION: Current state after updates:`, 
+      verifiedThrows.map(t => ({ id: t.id, dart: t.dartNumber, score: t.score, busted: t.busted })));
+
+    const stillBusted = verifiedThrows.filter(t => t.busted);
+    if (stillBusted.length > 0) {
+      console.error(`[unmark-round-busted] WARNING: ${stillBusted.length} throws are STILL marked as busted after update!`);
+    }
+
+    // Return the updated throws
+    res.json({ 
+      success: true, 
+      throws: verifiedThrows,
+      message: `Restored ${updates.length} throws from busted state for player ${playerId} in round ${roundNumber}`,
+      updatesApplied: updates.length,
+      verification: {
+        throwsChecked: verifiedThrows.length,
+        stillBusted: stillBusted.length,
+        details: verifiedThrows.map(t => ({ id: t.id, dart: t.dartNumber, busted: t.busted }))
+      }
+    });
+  } catch (error) {
+    console.error('Error restoring throws from busted state:', error);
+    res.status(500).json({ error: 'Could not restore throws from busted state' });
   }
 });
 

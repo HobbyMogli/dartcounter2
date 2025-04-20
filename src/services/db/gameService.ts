@@ -144,5 +144,43 @@ export const gameService = {
       throw new Error('Failed to get player throws');
     }
     return response.json();
+  },
+
+  // Mark a round as busted
+  async markRoundAsBusted(gameId: number, playerId: number, roundNumber: number) {
+    const response = await fetch(`${API_URL}/games/${gameId}/mark-round-busted`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        playerId,
+        roundNumber
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to mark round as busted');
+    }
+    return response.json();
+  },
+  
+  // Unmark a round as busted (restore throws to normal state)
+  async unmarkRoundAsBusted(gameId: number, playerId: number, roundNumber: number) {
+    const response = await fetch(`${API_URL}/games/${gameId}/unmark-round-busted`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        playerId,
+        roundNumber
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to restore round from busted state');
+    }
+    return response.json();
   }
 };

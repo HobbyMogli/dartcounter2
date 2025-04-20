@@ -14,7 +14,7 @@ const defaultSettings: SettingsContextType = {
   showStatistics: true,
   showLastThrowSum: true,
   showThrowHistory: true,
-  showDebugInfo: true,
+  showDebugInfo: false,
   updateSettings: () => {},
 };
 

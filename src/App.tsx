@@ -6,12 +6,14 @@ import GameBoard from './pages/GameBoard';
 import Players from './pages/Players';
 import Game from './pages/Game';
 import { SettingsProvider } from './contexts/SettingsContext';
+import { Toaster } from 'react-hot-toast';
 
 function App() {
   return (
     <SettingsProvider>
       <Router>
         <Layout>
+          <Toaster position="top-center" />
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/game" element={<Game />} />
