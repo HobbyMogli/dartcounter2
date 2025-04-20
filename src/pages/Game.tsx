@@ -30,12 +30,6 @@ interface ThrowHistory {
   playerIndex: number;
 }
 
-interface Throw {
-  roundNumber: number;
-  dartNumber: number;
-  score: number;
-}
-
 const Game: React.FC = () => {
   const location = useLocation();
   const gameData = location.state as GameSetupData;
@@ -197,19 +191,6 @@ const Game: React.FC = () => {
     }
   };
   
-  // Funktion zum Initialisieren einer neuen Runde
-  const initializeNewRound = (playerIndex: number): void => {
-    // Reset the player's lastThrows to [null, null, null]
-    setPlayers(currentPlayers => {
-      const newPlayers = [...currentPlayers];
-      newPlayers[playerIndex] = {
-        ...newPlayers[playerIndex],
-        lastThrows: [null, null, null]
-      };
-      return newPlayers;
-    });
-  };
-
   // Funktion zum Aktualisieren der Spielerstatistiken
   const updatePlayerStats = async (playerIndex: number) => {
     if (!gameId) return;
@@ -361,8 +342,6 @@ const Game: React.FC = () => {
     
     // Determine if we're going to a new round (forward) or back to a previous round (undo)
     const isMovingForward = newRound > currentRound;
-    const isMovingBackward = newRound < currentRound;
-    const isSameRound = newRound === currentRound;
     
     // Set the active player before updating display (to ensure correct player is targeted)
     setActivePlayerIndex(nextPlayerIndex);
