@@ -1,4 +1,3 @@
-import type { PrismaClient } from '@prisma/client';
 import { API_URL } from './api';
 
 export interface GameState {
@@ -118,6 +117,31 @@ export const gameService = {
     
     if (!response.ok) {
       throw new Error('Failed to end game');
+    }
+    return response.json();
+  },
+
+  // Spielerstatistiken abrufen
+  async getPlayerStats(gameId: number, playerId: number) {
+    const response = await fetch(`${API_URL}/games/${gameId}/player-stats/${playerId}`);
+    if (!response.ok) {
+      throw new Error('Failed to get player stats');
+    }
+    return response.json();
+  },
+
+  // Letzte Würfe eines Spielers abrufen
+  async getPlayerThrows(gameId: number, playerId: number, roundNumber?: number) {
+    let url = `${API_URL}/games/${gameId}/player-throws/${playerId}`;
+    
+    // Add round parameter if provided
+    if (roundNumber !== undefined) {
+      url += `?round=${roundNumber}`;
+    }
+    
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error('Failed to get player throws');
     }
     return response.json();
   }

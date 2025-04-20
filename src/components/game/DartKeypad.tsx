@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useSettings } from '../../contexts/SettingsContext';
 import { colors } from '../../styles/theme/colors';
 
 interface DartKeypadProps {
@@ -9,7 +8,6 @@ interface DartKeypadProps {
 }
 
 export const DartKeypad: React.FC<DartKeypadProps> = ({ onScore, onUndo, showMultipliedValues }) => {
-  const settings = useSettings();
   const [multiplier, setMultiplier] = useState(1);
 
   const handleNumberClick = (number: number) => {

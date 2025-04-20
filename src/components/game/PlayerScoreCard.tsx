@@ -22,6 +22,9 @@ const PlayerScoreCard: React.FC<PlayerScoreCardProps> = ({
 }) => {
   const settings = useSettings();
   
+  // Hilfsfunktion zum Formatieren der Würfe
+  const formatThrow = (v: number | null) => v === null ? '–' : v;
+  
   // Berechne die Summe der letzten Würfe
   const lastThrowSum = lastThrows.every(throw_ => throw_ !== null)
     ? lastThrows.reduce((sum, throw_) => sum + (throw_ || 0), 0)
@@ -39,8 +42,13 @@ const PlayerScoreCard: React.FC<PlayerScoreCardProps> = ({
           {/* Letzte Würfe */}
           <div className="grid grid-cols-3 gap-2 mb-1">
             {lastThrows.map((throw_, index) => (
-              <div key={index} className="bg-gray-800 p-2 rounded text-center text-white">
-                {throw_ === null ? '-' : throw_}
+              <div 
+                key={index} 
+                className={`bg-gray-800 p-2 rounded text-center text-white ${
+                  throw_ === null ? 'opacity-50' : ''
+                }`}
+              >
+                {formatThrow(throw_)}
               </div>
             ))}
           </div>

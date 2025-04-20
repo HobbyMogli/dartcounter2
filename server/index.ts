@@ -247,6 +247,298 @@ app.get('/api/games/:gameId/last-throw', async (req: Request, res: Response): Pr
   }
 });
 
+// GET /api/games/:gameId/player-stats/:playerId - Spielerstatistiken abrufen
+app.get('/api/games/:gameId/player-stats/:playerId', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const gameId = parseInt(req.params.gameId);
+    const playerId = parseInt(req.params.playerId);
+
+    // Hole alle Würfe des Spielers in diesem Spiel
+    const throws = await prisma.throw.findMany({
+      where: {
+        gameId,
+        playerId
+      },
+      orderBy: [
+        { roundNumber: 'asc' },
+        { dartNumber: 'asc' }
+      ]
+    });
+
+    // If the player has no throws, return all zeros
+    if (throws.length === 0) {
+      console.log(`[player-stats] No throws found for player ${playerId} in game ${gameId}, returning zeros`);
+      res.json({
+        average: 0,
+        dartsThrown: 0,
+        highestScore: 0,
+        totalPoints: 0
+      });
+      return;
+    }
+
+    // Gruppiere Würfe nach Runden
+    const rounds = new Map<number, number[]>();
+    throws.forEach(t => {
+      if (!rounds.has(t.roundNumber)) {
+        rounds.set(t.roundNumber, []);
+      }
+      rounds.get(t.roundNumber)?.push(t.score);
+    });
+
+    // Berechne Statistiken nur für komplette Runden
+    let totalPointsComplete = 0;
+    let completeRounds = 0;
+    rounds.forEach((roundThrows, roundNumber) => {
+      if (roundThrows.length === 3) {
+        totalPointsComplete += roundThrows.reduce((sum, score) => sum + score, 0);
+        completeRounds++;
+      }
+    });
+
+    // Berechne den Average nur für komplette Runden
+    const dartsThrown = throws.length;
+    const average = completeRounds > 0 ? (totalPointsComplete / (completeRounds * 3)) * 3 : 0;
+
+    // For highest score, first look at complete rounds
+    let highestScore = 0;
+    
+    // For complete rounds, use the total score of the round
+    rounds.forEach((roundThrows) => {
+      if (roundThrows.length === 3) {
+        const roundScore = roundThrows.reduce((sum, score) => sum + score, 0);
+        if (roundScore > highestScore) {
+          highestScore = roundScore;
+        }
+      }
+    });
+    
+    // If no complete rounds, look at individual throws
+    if (highestScore === 0 && throws.length > 0) {
+      highestScore = Math.max(...throws.map(t => t.score));
+    }
+
+    // Berechne die Gesamtpunktzahl (inkl. unvollständiger Runden)
+    const totalPoints = throws.reduce((sum, t) => sum + t.score, 0);
+    
+    console.log(`[player-stats] Stats for player ${playerId}: throws=${dartsThrown}, avg=${average.toFixed(1)}, high=${highestScore}, total=${totalPoints}`);
+
+    res.json({
+      average,
+      dartsThrown,
+      highestScore,
+      totalPoints
+    });
+  } catch (error) {
+    console.error('Error fetching player stats:', error);
+    res.status(500).json({
+      error: 'Could not fetch player stats',
+      average: 0,
+      dartsThrown: 0,
+      highestScore: 0,
+      totalPoints: 0
+    });
+  }
+});
+
+// GET /api/games/:gameId/player-throws/:playerId - Letzte Würfe eines Spielers abrufen
+app.get('/api/games/:gameId/player-throws/:playerId', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const gameId = parseInt(req.params.gameId);
+    const playerId = parseInt(req.params.playerId);
+
+    // Check if the round parameter is provided
+    const roundParam = req.query.round ? parseInt(req.query.round as string) : undefined;
+    
+    // NEW: Check if fallback is disabled (client wants empty fields instead of previous round's throws)
+    const disableFallback = req.query.disableFallback === 'true';
+    console.log(`[player-throws] Fallback ${disableFallback ? 'disabled' : 'enabled'} for request`);
+    
+    // If no specific round is requested, get the most recent round
+    let targetRound = roundParam;
+    if (targetRound === undefined) {
+      const mostRecentThrow = await prisma.throw.findFirst({
+        where: {
+          gameId,
+          playerId // Important: filter by playerId first
+        },
+        orderBy: {
+          id: 'desc'
+        },
+        select: {
+          roundNumber: true
+        }
+      });
+      
+      targetRound = mostRecentThrow?.roundNumber || 1;
+    }
+    
+    console.log(`[player-throws] Looking for throws in gameId=${gameId}, playerId=${playerId}, EXACT round=${targetRound}`);
+    
+    // First check if there are ANY throws for this player in this specific round
+    const throwCount = await prisma.throw.count({
+      where: {
+        gameId,
+        playerId,
+        roundNumber: targetRound
+      }
+    });
+    
+    console.log(`[player-throws] Found ${throwCount} total throws for this round`);
+    
+    // Get ALL throws for this player in this game for debugging
+    const allPlayerThrows = await prisma.throw.findMany({
+      where: {
+        gameId,
+        playerId // Important: filter by playerId only
+      },
+      orderBy: [
+        { roundNumber: 'asc' },
+        { dartNumber: 'asc' }
+      ]
+    });
+    
+    console.log(`[player-throws] All throws for this player:`, 
+      allPlayerThrows.map(t => ({ round: t.roundNumber, dart: t.dartNumber, score: t.score })));
+    
+    // FALLBACK LOGIC: If there are no throws in the requested round,
+    // find the player's most recent round with throws UNLESS fallback is disabled
+    let effectiveRound = targetRound;
+    let roundThrows;
+    let usedFallback = false;
+    
+    if (throwCount === 0 && allPlayerThrows.length > 0 && !disableFallback) {
+      console.log(`[player-throws] No throws in requested round ${targetRound}, looking for most recent round...`);
+      
+      // Find the most recent round number where THIS PLAYER has throws - filter by playerId first!
+      const mostRecentRound = await prisma.throw.findFirst({
+        where: {
+          gameId,
+          playerId, // Important: filter by playerId first
+        },
+        orderBy: {
+          roundNumber: 'desc'
+        },
+        select: {
+          roundNumber: true
+        }
+      });
+      
+      if (mostRecentRound) {
+        effectiveRound = mostRecentRound.roundNumber;
+        usedFallback = true;
+        console.log(`[player-throws] Found most recent round: ${effectiveRound}`);
+        
+        // Now get throws from that round for THIS PLAYER
+        roundThrows = await prisma.throw.findMany({
+          where: {
+            gameId,
+            playerId, // Important: filter by playerId
+            roundNumber: effectiveRound
+          },
+          orderBy: {
+            dartNumber: 'asc'
+          }
+        });
+        
+        console.log(`[player-throws] Using throws from round ${effectiveRound} as fallback:`,
+          roundThrows.map(t => ({ dart: t.dartNumber, score: t.score })));
+      }
+    } else {
+      // If fallback is disabled and there are no throws, we'll return empty throws
+      if (throwCount === 0 && disableFallback) {
+        console.log(`[player-throws] No throws in requested round ${targetRound} and fallback disabled, returning empty array`);
+        roundThrows = [];
+      } else {
+        // Fetch throws for the specific round - EXPLICITLY restrict to the exact round for THIS PLAYER
+        roundThrows = await prisma.throw.findMany({
+          where: {
+            gameId,
+            playerId, // Important: filter by playerId
+            roundNumber: {
+              equals: targetRound
+            }
+          },
+          orderBy: {
+            dartNumber: 'asc'
+          }
+        });
+
+        console.log(`[player-throws] Found ${roundThrows.length} throws for EXACT round ${targetRound}:`, 
+          roundThrows.map(t => ({ dart: t.dartNumber, score: t.score, round: t.roundNumber })));
+      }
+    }
+
+    // Create an array with 3 positions (for dart 1, 2, 3)
+    const formattedThrows = [null, null, null];
+    
+    // Fill the throws in the correct position
+    if (roundThrows && roundThrows.length > 0) {
+      // First clear any previous data to ensure no old data appears
+      formattedThrows.fill(null);
+      
+      // Then add only the throws that exist for the effective round
+      roundThrows.forEach(throw_ => {
+        if (throw_.dartNumber >= 1 && throw_.dartNumber <= 3) {
+          formattedThrows[throw_.dartNumber - 1] = throw_.score;
+        }
+      });
+    }
+
+    // Calculate if we have any throws at all for this player
+    const hasAnyThrows = await prisma.throw.count({
+      where: {
+        gameId,
+        playerId // Important: filter by playerId
+      }
+    }) > 0;
+
+    // Calculate the most recent round THIS PLAYER has thrown in
+    const mostRecentRound = hasAnyThrows ? 
+      (await prisma.throw.findFirst({
+        where: { 
+          gameId, 
+          playerId // Important: filter by playerId
+        },
+        orderBy: { roundNumber: 'desc' },
+        select: { roundNumber: true }
+      }))?.roundNumber || 1 : 1;
+
+    // Return detailed information
+    res.json({
+      lastThrows: formattedThrows,
+      currentRound: targetRound,
+      mostRecentRound: mostRecentRound,
+      isRoundComplete: roundThrows?.length === 3,
+      hasThrows: roundThrows?.length > 0,
+      effectiveRound: effectiveRound, // Added to response to inform client which round's data we're showing
+      usedFallback, // Added to indicate if we fell back to a previous round
+      debug: {
+        requestedRound: roundParam,
+        targetRound,
+        effectiveRound,
+        throwCount,
+        throwsFound: roundThrows?.length || 0,
+        hasAnyThrows,
+        disableFallback,
+        usedFallback,
+        allRounds: allPlayerThrows.map(t => t.roundNumber).filter((v, i, a) => a.indexOf(v) === i), // Unique rounds
+        roundThrows: roundThrows?.map(t => ({ dart: t.dartNumber, score: t.score, round: t.roundNumber })) || []
+      }
+    });
+  } catch (error) {
+    console.error('Error getting player throws:', error);
+    res.status(500).json({ 
+      error: 'Could not get player throws',
+      lastThrows: [null, null, null],
+      currentRound: 1,
+      mostRecentRound: 1,
+      isRoundComplete: false,
+      hasThrows: false
+    });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
 });

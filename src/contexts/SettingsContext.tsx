@@ -5,6 +5,7 @@ interface SettingsContextType {
   showStatistics: boolean;
   showLastThrowSum: boolean;
   showThrowHistory: boolean;
+  showDebugInfo: boolean;
   updateSettings: (settings: Partial<SettingsContextType>) => void;
 }
 
@@ -13,6 +14,7 @@ const defaultSettings: SettingsContextType = {
   showStatistics: true,
   showLastThrowSum: true,
   showThrowHistory: true,
+  showDebugInfo: true,
   updateSettings: () => {},
 };
 

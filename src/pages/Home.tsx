@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, Button } from '../components/common';
+import { Button } from '../components/common';
 import { playerService } from '../services/db';
 import Select from 'react-select';
 import type { X01Settings as IX01Settings, GameSetupData } from '../types/gameTypes';

@@ -1,6 +1,4 @@
 import React, { ReactNode, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { FaCog } from 'react-icons/fa';
 import Navbar from './Navbar';
 import Background from './Background';
 import { SettingsModal } from '../game-settings';
@@ -10,7 +8,6 @@ interface LayoutProps {
 }
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const location = useLocation();
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const handleOpenSettings = () => {

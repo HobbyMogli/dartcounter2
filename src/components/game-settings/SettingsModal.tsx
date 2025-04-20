@@ -63,6 +63,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       value: settings.showThrowHistory,
       onChange: (value: boolean) => settings.updateSettings({ showThrowHistory: value }),
     },
+    {
+      label: 'Debug Information',
+      description: 'Show detailed game state and debugging information',
+      value: settings.showDebugInfo,
+      onChange: (value: boolean) => settings.updateSettings({ showDebugInfo: value }),
+    },
   ];
 
   if (!isOpen) return null;
