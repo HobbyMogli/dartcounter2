@@ -1,54 +1,67 @@
-# React + TypeScript + Vite
+# DartCounter2
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This is a web-based Dart scoring application built with React, TypeScript, Node.js, Express, and Prisma.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+*   X01 Game Mode (301, 501, etc.)
+*   Player management
+*   Real-time scoring
+*   Bust detection
+*   Checkout validation (Straight, Double-Out, Triple-Out)
+*   Undo functionality
+*   Persistent player statistics
+*   Settings configuration
 
-## Expanding the ESLint configuration
+## Tech Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+*   **Frontend:** React, TypeScript, Vite, Tailwind CSS
+*   **Backend:** Node.js, Express, TypeScript
+*   **Database:** Prisma, SQLite
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+## Getting Started
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+### Prerequisites
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+*   Node.js (v18 or later recommended)
+*   npm or yarn
 
-export default tseslint.config({
-  plugins: {
-    // Add the react-x and react-dom plugins
-    'react-x': reactX,
-    'react-dom': reactDom,
-  },
-  rules: {
-    // other rules...
-    // Enable its recommended typescript rules
-    ...reactX.configs['recommended-typescript'].rules,
-    ...reactDom.configs.recommended.rules,
-  },
-})
-```
+### Installation
+
+1.  Clone the repository:
+    ```bash
+    git clone https://github.com/HobbyMogli/dartcounter2.git
+    cd dartcounter2
+    ```
+2.  Install frontend dependencies:
+    ```bash
+    npm install
+    # or
+    # yarn install
+    ```
+3.  Install backend dependencies:
+    ```bash
+    cd server
+    npm install
+    # or
+    # yarn install
+    cd ..
+    ```
+4.  Set up the database:
+    ```bash
+    npx prisma migrate dev --name init
+    ```
+
+### Running the Application
+
+1.  Start the backend server:
+    ```bash
+    cd server
+    npm run dev
+    ```
+2.  In a separate terminal, start the frontend development server:
+    ```bash
+    npm run dev
+    ```
+
+The application should now be running at `http://localhost:5173`.
