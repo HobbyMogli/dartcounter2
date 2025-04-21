@@ -3,21 +3,13 @@ import { DartKeypad } from './DartKeypad';
 import { useSettings } from '../../contexts/SettingsContext';
 
 interface X01GameProps {
-  currentScore: number;
-  onGameEnd: (score: number) => void;
   onThrow?: (score: number, multiplier: number, targetNumber?: number, isBull?: boolean) => void;
   onUndo?: () => void;
-  gameSettings?: {
-    checkOut: 'straight' | 'double' | 'triple';
-  };
 }
 
 export const X01Game: React.FC<X01GameProps> = ({
-  currentScore,
-  onGameEnd,
   onThrow,
-  onUndo: parentOnUndo,
-  gameSettings
+  onUndo: parentOnUndo
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const settings = useSettings();

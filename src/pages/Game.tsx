@@ -214,43 +214,6 @@ const Game: React.FC = () => {
       return false; // No player switch needed
     }
   };
-  
-  // Updated to work with player-specific dart numbers
-  const undoRoundAndDart = (): boolean => {
-    const currentPlayer = players[activePlayerIndex];
-    const currentDart = currentPlayer.currentDart;
-    
-    if (currentDart === 1) {
-      // If we're at dart 1, go to the previous round and set the previous player's dart to 3
-      setCurrentRound(prev => Math.max(1, prev - 1));
-      
-      // Calculate the previous player index
-      const prevPlayerIndex = (activePlayerIndex - 1 + players.length) % players.length;
-      
-      setPlayers(currentPlayers => {
-        const updatedPlayers = [...currentPlayers];
-        updatedPlayers[prevPlayerIndex] = {
-          ...updatedPlayers[prevPlayerIndex],
-          currentDart: 3
-        };
-        return updatedPlayers;
-      });
-      
-      return true; // Signal for player switch
-    } else {
-      // Otherwise, just decrease the dart number for the current player
-      setPlayers(currentPlayers => {
-        const updatedPlayers = [...currentPlayers];
-        updatedPlayers[activePlayerIndex] = {
-          ...updatedPlayers[activePlayerIndex],
-          currentDart: currentDart - 1
-        };
-        return updatedPlayers;
-      });
-      
-      return false; // No player switch needed
-    }
-  };
 
   // Funktion zum Aktualisieren der Spielerstatistiken
   const updatePlayerStats = async (playerIndex: number) => {
@@ -415,7 +378,7 @@ const Game: React.FC = () => {
     const isMovingForward = newRound > currentRound;
     
     // Set the active player before updating display (to ensure correct player is targeted)
-    setActivePlayerIndex(nextPlayerIndex);
+        setActivePlayerIndex(nextPlayerIndex);
     
     try {
       // Update displays for ALL players, not just the active one
@@ -510,10 +473,10 @@ const Game: React.FC = () => {
     const nextPlayerIndex = (activePlayerIndex + 1) % players.length;
     // Only advance the round if we were on the last dart
     const nextRound = roundNumber + (dartNumber === 3 ? 1 : 0);
-    
-    // Reset current throw
-    setCurrentThrow([]);
-    
+
+      // Reset current throw
+      setCurrentThrow([]);
+
     // Make sure the player's score is properly updated based on database
     await updatePlayerStats(activePlayerIndex);
     
@@ -659,7 +622,7 @@ const Game: React.FC = () => {
         lastThrows: newLastThrows
       };
       setPlayers(updatedPlayers);
-      
+
       // Add to throw history
       setThrowHistory([
         ...throwHistory,
@@ -897,7 +860,7 @@ const Game: React.FC = () => {
       setIsGameOver(true);
       
       // Don't automatically save the game, let the user do it explicitly
-      console.log('Game ended with score:', score);
+    console.log('Game ended with score:', score);
     } catch (error) {
       console.error('Error ending game:', error);
     }
@@ -982,21 +945,21 @@ const Game: React.FC = () => {
           const highlightIndex = shouldHighlight ? (player.currentDart - 1) : -1; // Use -1 if no highlight
 
           return (
-            <PlayerScoreCard
-              key={player.id}
-              playerName={player.name}
-              currentScore={player.currentScore}
-              lastThrows={player.lastThrows}
-              isActive={index === activePlayerIndex}
-              statistics={{
-                average: player.gameStats.averagePerThrow,
-                dartsThrown: player.gameStats.dartsThrown,
-                highestScore: player.gameStats.highestThrow
-              }}
+          <PlayerScoreCard
+            key={player.id}
+            playerName={player.name}
+            currentScore={player.currentScore}
+            lastThrows={player.lastThrows}
+            isActive={index === activePlayerIndex}
+            statistics={{
+              average: player.gameStats.averagePerThrow,
+              dartsThrown: player.gameStats.dartsThrown,
+              highestScore: player.gameStats.highestThrow
+            }}
               showStats={settings.showStatistics}
               showScoreSum={settings.showLastThrowSum}
               highlightDartIndex={highlightIndex} // Pass the calculated index
-            />
+          />
           );
         })}
       </div>
@@ -1008,11 +971,8 @@ const Game: React.FC = () => {
       )}
       
       <X01Game
-        currentScore={players[activePlayerIndex]?.currentScore || gameData.settings.startScore || 501}
-        onGameEnd={handleGameEnd}
         onThrow={handleThrow}
         onUndo={handleUndo}
-        gameSettings={gameData.settings}
       />
       <SettingsModal
         isOpen={isSettingsOpen}

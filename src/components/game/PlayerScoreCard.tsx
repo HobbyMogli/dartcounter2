@@ -81,7 +81,7 @@ const PlayerScoreCard: React.FC<PlayerScoreCardProps> = ({
           <div
             key={index}
             // Conditionally set border color based on highlightDartIndex
-            className={`w-10 h-10 border ${index === highlightDartIndex ? 'border-neon-lime border-2' : 'border-neon-blue'} rounded flex items-center justify-center text-lg font-semibold text-gray-100 transition-shadow duration-150 ease-in-out ${ 
+            className={`w-10 h-10 border ${index === highlightDartIndex ? 'border-neon-mint border-2' : 'border-neon-blue'} rounded flex items-center justify-center text-lg font-semibold text-gray-100 transition-shadow duration-150 ease-in-out ${ 
               // Check for null before accessing properties
               throw_ === null ? 'opacity-40' : 
               throw_.score < 0 ? `text-neon-red line-through decoration-neon-red decoration-1` : '' // Busted styling based on score < 0
@@ -90,7 +90,7 @@ const PlayerScoreCard: React.FC<PlayerScoreCardProps> = ({
               // Conditional boxShadow: Highlight current dart > Multiplier > Default
               boxShadow: 
                 index === highlightDartIndex // Prioritize highlight
-                  ? `inset 0 0 8px 0 ${colors.neon.lime}` // Highlight: lime shadow
+                  ? `inset 0 0 8px 0 ${colors.neon.mint}` // Highlight: lime shadow
                   : throw_ === null 
                     ? 'none' 
                     : throw_.multiplier === 3 

@@ -40,22 +40,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
 
   const toggleOptions = [
     {
-      label: 'Multiplied Values',
-      description: 'Show multiplied values (e.g., 2x, 3x) on the keypad',
-      value: settings.showMultipliedValues,
-      onChange: (value: boolean) => settings.updateSettings({ showMultipliedValues: value }),
-    },
-    {
       label: 'Game Statistics',
       description: 'Show game statistics during gameplay',
       value: settings.showStatistics,
       onChange: (value: boolean) => settings.updateSettings({ showStatistics: value }),
-    },
-    {
-      label: 'Last Throw Sum',
-      description: 'Show the sum of the last throw',
-      value: settings.showLastThrowSum,
-      onChange: (value: boolean) => settings.updateSettings({ showLastThrowSum: value }),
     },
     {
       label: 'Throw History',
@@ -64,16 +52,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       onChange: (value: boolean) => settings.updateSettings({ showThrowHistory: value }),
     },
     {
-      label: 'Debug Information',
-      description: 'Show detailed game state and debugging information',
-      value: settings.showDebugInfo,
-      onChange: (value: boolean) => settings.updateSettings({ showDebugInfo: value }),
+      label: 'Last Throw Sum',
+      description: 'Show the sum of the last throw',
+      value: settings.showLastThrowSum,
+      onChange: (value: boolean) => settings.updateSettings({ showLastThrowSum: value }),
+    },
+    {
+      label: 'Multiplied Values',
+      description: 'Show multiplied values (e.g., 2x, 3x) on the keypad',
+      value: settings.showMultipliedValues,
+      onChange: (value: boolean) => settings.updateSettings({ showMultipliedValues: value }),
     },
     {
       label: 'Highlight Current Dart',
       description: 'Highlight the box for the current dart to be thrown',
       value: settings.highlightCurrentDart,
       onChange: (value: boolean) => settings.updateSettings({ highlightCurrentDart: value }),
+    },
+    {
+      label: 'Debug Information',
+      description: 'Show detailed game state and debugging information',
+      value: settings.showDebugInfo,
+      onChange: (value: boolean) => settings.updateSettings({ showDebugInfo: value }),
     },
   ];
 
@@ -99,7 +99,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
               Passe an, welche Informationen während des Spiels angezeigt werden sollen
             </p>
             
-            <div className="space-y-3">
+            <div className="space-y-2">
               {toggleOptions.map((option) => (
                 <Toggle
                   key={option.label}

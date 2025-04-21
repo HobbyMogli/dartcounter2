@@ -616,13 +616,13 @@ app.get('/api/games/:gameId/player-throws/:playerId', async (req: Request, res: 
         select: {
           roundNumber: true
         }
-      });
-      
+    });
+
       targetRound = mostRecentThrow?.roundNumber || 1;
     }
     
     console.log(`[player-throws] Looking for throws in gameId=${gameId}, playerId=${playerId}, EXACT round=${targetRound}`);
-    
+
     // First check if there are ANY throws for this player in this specific round
     const throwCount = await prisma.throw.count({
       where: {

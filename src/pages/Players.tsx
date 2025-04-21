@@ -88,15 +88,8 @@ const Players: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-neon-blue">Spielerverwaltung</h1>
-        <Button 
-          variant="priority" 
-          size="lg"
-          onClick={() => setIsAddModalOpen(true)}
-        >
-          Neuer Spieler
-        </Button>
+      <div className="flex justify-center items-center">
+        <h1 className="text-3xl font-bold text-primary-100">Spielerverwaltung</h1>
       </div>
 
       {error && (
@@ -106,14 +99,22 @@ const Players: React.FC = () => {
       )}
 
       <Card className="overflow-hidden">
-        <div className="p-4 border-b border-gray-700">
+        <div className="mx-auto p-4 border-b border-gray-700 flex justify-between items-center space-x-7">
           <input
             type="text"
             placeholder="Spieler suchen..."
-            className="w-full px-4 py-2 bg-dark-800 border border-gray-700 rounded-lg text-gray-300 focus:outline-none focus:border-neon-blue focus:glow-blue"
+            className="w-full px-4 py-2 bg-dark-800 border border-gray-700 rounded-lg text-gray-300 transition-all duration-300 hover:border-neon-blue hover:glow-blue"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+          <Button 
+          variant="priority" 
+          size="md"
+          onClick={() => setIsAddModalOpen(true)}
+          className="whitespace-nowrap"
+          >
+          Neuer Spieler
+          </Button>
         </div>
 
         {isLoading ? (

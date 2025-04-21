@@ -109,6 +109,11 @@ const Home: React.FC = () => {
   const [players, setPlayers] = useState<Player[]>([]);
   const navigate = useNavigate();
 
+  // Moved these calculations after useState hooks
+  const activeIndex = GAME_MODES.findIndex(m => m.id === selectedGameMode);
+  const isFirstActive = activeIndex === 0;
+  const isLastActive = activeIndex === GAME_MODES.length - 1;
+
   useEffect(() => {
     const loadPlayers = async () => {
       try {
@@ -150,25 +155,26 @@ const Home: React.FC = () => {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Browser-ähnliche Tab-Navigation mit Blur-Effekt */}
-      <div className="relative">
+      <div className="relative w-fit mx-auto">
         {/* Tab-Leiste mit "Browser-Tabs" und Blur-Effekt */}
-        <div className="flex">
-          {GAME_MODES.map((mode, index) => (
+        <div className={`grid w-full grid-cols-${GAME_MODES.length}`}>
+          {GAME_MODES.map((mode) => (
             <div
               key={mode.id}
               className={`
                 relative
-                px-6
+                px-4
                 py-3
                 cursor-pointer
                 select-none
                 backdrop-blur-md
-                ${index === 0 ? 'ml-2' : '-ml-2'}
+                border-x-2
                 ${selectedGameMode === mode.id
-                  ? 'z-10 bg-dark-800/70 text-neon-blue border-t-2 border-x-2 border-neon-blue rounded-t-lg'
-                  : 'z-0 bg-dark-900/50 text-gray-400 border-b-2 border-neon-blue hover:bg-dark-800/60 hover:text-gray-200'
+                  ? 'z-10 bg-dark-800/70 text-neon-blue border-t-2 border-neon-blue border-b-0 rounded-t-lg'
+                  : 'z-0 bg-dark-900/50 text-gray-400 border-b-2 border-gray-500 border-transparent rounded-t-lg hover:bg-dark-800/60 hover:text-gray-200'
                 }
                 transition-all duration-200
+                text-center
               `}
               onClick={() => setSelectedGameMode(mode.id)}
             >
@@ -176,32 +182,30 @@ const Home: React.FC = () => {
               {/* Geschwungene Ecken für Browser-Tab-Look */}
               {selectedGameMode === mode.id && (
                 <>
-                  <div className="absolute bottom-0 left-0 w-2 h-2 bg-dark-800/70 backdrop-blur-md transform -translate-x-full">
-                    <div className="absolute bottom-0 right-0 w-2 h-2 bg-dark-900/50 rounded-bl-lg"></div>
-                  </div>
-                  <div className="absolute bottom-0 right-0 w-2 h-2 bg-dark-800/70 backdrop-blur-md transform translate-x-full">
-                    <div className="absolute bottom-0 left-0 w-2 h-2 bg-dark-900/50 rounded-br-lg"></div>
-                  </div>
+                  {/* Ensure no triangle divs remain here */}
                 </>
               )}
             </div>
           ))}
-          {/* Untere Linie für nicht-aktive Bereiche */}
-          <div className="flex-grow border-b-2 border-neon-blue"></div>
         </div>
 
-        {/* Inhalt des aktiven Tabs mit Blur-Effekt */}
-        <div className="bg-dark-800/70 backdrop-blur-md p-6 border-x-2 border-b-2 border-neon-blue rounded-b-lg">
+        {/* Inhalt des aktiven Tabs mit Blur-Effekt - Add relative, border-t, -mt, remove rounded-b */}
+        <div className="relative bg-dark-800/70 backdrop-blur-md p-6 border-x-2 border-b-2 border-t-2 border-neon-blue -mt-0.5">
+          {/* Removed redundant cover-up divs */}
+          
+          
           <div className="space-y-6">
             {/* Spielmodus-Einstellungen */}
             <div className="space-y-4">
-              <h2 className="text-xl font-bold text-neon-blue">Spieleinstellungen</h2>
+              <h1 className="text-2xl font-bold text-primary-100 mb-6 text-center">
+                Spieleinstellungen
+              </h1>
               {renderGameSettings()}
             </div>
 
             {/* Spielerauswahl mit angepasstem Styling */}
             <div className="space-y-4">
-              <h2 className="text-xl font-bold text-neon-blue">Spieler auswählen</h2>
+              <h2 className="text-xl font-bold text-primary-100 mb-6 text-center">Spieler auswählen</h2>
               <Select
                 isMulti
                 options={players.map(player => ({
