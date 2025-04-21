@@ -69,6 +69,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       value: settings.showDebugInfo,
       onChange: (value: boolean) => settings.updateSettings({ showDebugInfo: value }),
     },
+    {
+      label: 'Highlight Current Dart',
+      description: 'Highlight the box for the current dart to be thrown',
+      value: settings.highlightCurrentDart,
+      onChange: (value: boolean) => settings.updateSettings({ highlightCurrentDart: value }),
+    },
   ];
 
   if (!isOpen) return null;

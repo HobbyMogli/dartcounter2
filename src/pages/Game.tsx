@@ -13,6 +13,12 @@ import { toast } from 'react-hot-toast';
 // API URL for direct fetch calls
 const API_URL = 'http://localhost:3001/api';
 
+// Define the structure for a single throw display
+interface ThrowDisplayData {
+  score: number;
+  multiplier: number;
+}
+
 interface GameStatistics {
   dartsThrown: number;
   averagePerThrow: number;
@@ -22,7 +28,7 @@ interface GameStatistics {
 
 interface PlayerGameState extends Player {
   currentScore: number;
-  lastThrows: (number | null)[];
+  lastThrows: (ThrowDisplayData | null)[];
   gameStats: GameStatistics;
   currentDart: number; // Track dart number per player
 }
@@ -72,8 +78,6 @@ const Game: React.FC = () => {
     isBusted?: boolean;
   }>>([]);
 
-  const showGameStats = settings.showStatistics;
-  
   // Update showDebugPanel when settings change
   useEffect(() => {
     setShowDebugPanel(settings.showDebugInfo);
@@ -313,7 +317,7 @@ const Game: React.FC = () => {
         const newPlayers = [...currentPlayers];
         newPlayers[playerIndex] = {
           ...newPlayers[playerIndex],
-          lastThrows: hasThrows ? throwData.lastThrows : [null, null, null]
+          lastThrows: hasThrows ? (throwData.lastThrows as (ThrowDisplayData | null)[]) : [null, null, null]
         };
         return newPlayers;
       });
@@ -357,10 +361,10 @@ const Game: React.FC = () => {
       
       // Fetch throws for this player in the target round
       const throwData = await gameService.getPlayerThrows(gameId, playerId, targetRound);
-      console.log(`[updatePlayerThrows] Response:`, throwData);
+      console.log(`[updatePlayerThrows] Response (should contain score/multiplier objects):`, throwData);
 
       // Count the actual number of non-null throws
-      const actualThrowCount = throwData.lastThrows.filter((t: number | null) => t !== null).length;
+      const actualThrowCount = throwData.lastThrows.filter((t: ThrowDisplayData | null) => t !== null).length;
       console.log(`[updatePlayerThrows] Found ${actualThrowCount} actual throws in round ${targetRound}`);
       
       // If we have throws in the database, use them
@@ -371,7 +375,7 @@ const Game: React.FC = () => {
           const newPlayers = [...currentPlayers];
           newPlayers[playerIndex] = {
             ...newPlayers[playerIndex],
-            lastThrows: throwData.lastThrows
+            lastThrows: throwData.lastThrows as (ThrowDisplayData | null)[]
           };
           return newPlayers;
         });
@@ -418,23 +422,16 @@ const Game: React.FC = () => {
       for (let playerIndex = 0; playerIndex < players.length; playerIndex++) {
         // For the player we're switching to
         if (playerIndex === nextPlayerIndex) {
-          // Case 1: Moving forward to a new round - show empty displays
+          // ALWAYS fetch the state for the incoming player for the round they are entering.
+          // Use disableFallback=true to ensure we see [null,null,null] if they haven't thrown yet in this round.
           if (isMovingForward) {
-            console.log(`[handlePlayerSwitch] Moving forward to round ${newRound}, setting empty display for player ${playerIndex}`);
-            setPlayers(currentPlayers => {
-              const newPlayers = [...currentPlayers];
-              newPlayers[playerIndex] = {
-                ...newPlayers[playerIndex],
-                lastThrows: [null, null, null]
-              };
-              return newPlayers;
-            });
-          }
-          // Case 2: Moving backward or Case 3: Same round
-          else {
-            // When moving backward, we want to show the actual throws for that round,
-            // so we don't disable fallback
-            await updatePlayerThrowsDisplay(playerIndex, newRound, false);
+            console.log(`[handlePlayerSwitch] Moving forward to round ${newRound}. Fetching display for incoming player ${playerIndex} (disableFallback=true)`);
+            await updatePlayerThrowsDisplay(playerIndex, newRound, true);
+          } else {
+            // Also use disableFallback=true when staying in the same round (e.g., after opponent bust or undo)
+            // to ensure the incoming player starts with a clean slate for that round.
+            console.log(`[handlePlayerSwitch] Staying in round/moving backward to ${newRound}. Fetching display for incoming player ${playerIndex} (disableFallback=true)`);
+            await updatePlayerThrowsDisplay(playerIndex, newRound, true);
           }
         } 
         // For all other players, update their displays based on the appropriate round
@@ -442,6 +439,7 @@ const Game: React.FC = () => {
           // When moving forward, other players should show their throws from the previous round
           const targetRound = isMovingForward ? currentRound : newRound;
           // For non-active players, allow fallback to previous rounds for a complete display
+          console.log(`[handlePlayerSwitch] Updating display for non-active player ${playerIndex} for targetRound ${targetRound} (disableFallback=false)`);
           await updatePlayerThrowsDisplay(playerIndex, targetRound, false);
         }
         
@@ -651,7 +649,7 @@ const Game: React.FC = () => {
       // Create a new lastThrows array with the current throw at the correct position
       // and null values for the remaining positions
       let newLastThrows = [...currentPlayer.lastThrows];
-      newLastThrows[dartNumber - 1] = throwValue;
+      newLastThrows[dartNumber - 1] = { score: throwValue, multiplier: multiplier };
       
       // Update player's score and lastThrows
       const updatedPlayers = [...players];
@@ -974,21 +972,33 @@ const Game: React.FC = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {players.map((player, index) => (
-          <PlayerScoreCard
-            key={player.id}
-            playerName={player.name}
-            currentScore={player.currentScore}
-            lastThrows={player.lastThrows}
-            isActive={index === activePlayerIndex}
-            statistics={{
-              average: player.gameStats.averagePerThrow,
-              dartsThrown: player.gameStats.dartsThrown,
-              highestScore: player.gameStats.highestThrow
-            }}
-          />
-        ))}
+      {/* Grid for Player Score Cards - simplified layout */}
+      <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-${players.length > 2 ? '3' : players.length} lg:grid-cols-${players.length > 4 ? '4' : players.length} gap-4 justify-items-center`}>
+        {/* Player Score Cards Map */}
+        {players.map((player, index) => {
+          // Determine if and which dart index to highlight for this player
+          const shouldHighlight = index === activePlayerIndex && settings.highlightCurrentDart;
+          // player.currentDart is 1, 2, or 3. Array index is 0, 1, or 2.
+          const highlightIndex = shouldHighlight ? (player.currentDart - 1) : -1; // Use -1 if no highlight
+
+          return (
+            <PlayerScoreCard
+              key={player.id}
+              playerName={player.name}
+              currentScore={player.currentScore}
+              lastThrows={player.lastThrows}
+              isActive={index === activePlayerIndex}
+              statistics={{
+                average: player.gameStats.averagePerThrow,
+                dartsThrown: player.gameStats.dartsThrown,
+                highestScore: player.gameStats.highestThrow
+              }}
+              showStats={settings.showStatistics}
+              showScoreSum={settings.showLastThrowSum}
+              highlightDartIndex={highlightIndex} // Pass the calculated index
+            />
+          );
+        })}
       </div>
       
       {currentThrow.length > 0 && (
@@ -1008,12 +1018,6 @@ const Game: React.FC = () => {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
       />
-      
-      {showGameStats && (
-        <div className="mt-4 text-white text-sm">
-          <p>Game settings active: {JSON.stringify(settings.showStatistics)}</p>
-        </div>
-      )}
       
       {/* Game Over Modal */}
       {isGameOver && winner && (

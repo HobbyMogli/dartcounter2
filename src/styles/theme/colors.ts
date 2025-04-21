@@ -24,24 +24,28 @@ export const colors = {
       900: '#111827',
     },
     success: {
-      light: '#86efac',
-      DEFAULT: '#22c55e',
-      dark: '#15803d',
+      light: '#ccff00',    // Neon Lime (Electric Lime)
+      DEFAULT: '#ccff00', // Neon Lime (Electric Lime)
+      dark: '#a3cc00',     // Darker shade of Lime
     },
     warning: {
-      light: '#fde047',
-      DEFAULT: '#eab308',
-      dark: '#a16207',
+      light: '#ffcc66',    // Lighter Neon Orange
+      DEFAULT: '#ff9900', // Neon Orange
+      dark: '#cc7a00',     // Darker Neon Orange
     },
     error: {
-      light: '#fca5a5',
-      DEFAULT: '#ef4444',
-      dark: '#b91c1c',
+      light: '#ff4d66',    // Lighter Neon Red
+      DEFAULT: '#ff0033', // Neon Red
+      dark: '#cc0029',     // Darker Neon Red
     },
     neon: {
-      blue: '#00f2ff',    // Hauptfarbe, helles Neon-Blau
-      pink: '#ff00ff',    // Akzentfarbe, Neon-Pink
-      red: '#ff0033',     // Für Danger-Elemente
+      blue: '#22d3ee',    // Primär (Hauptfarbe)
+      pink: '#ff00ff',    // Akzent 1 (Active Icons, Hover, Player 2)
+      violet: '#8e2eff',  // Akzent 2 (Secondary Buttons)
+      lime: '#ccff00',    // Akzent 3 (Success, Special Hits)
+      orange: '#ff9900',  // Warnung (Low Score, Warnings)
+      red: '#ff0033',     // Fehler (Bust, Errors)
+      mint: '#00ffe7'     // Highlight (Score Highlights)
     },
     dark: {
       900: '#121212',     // Dunkelster Hintergrund
@@ -50,7 +54,7 @@ export const colors = {
       600: '#2d2d2d',     // Hover-States
     },
     darts: {
-      double: '#ffb266',  // Pastelliges Orange für Double
-      triple: '#ff4d00',  // Kräftiges Orange-Rot für Triple
+      double: '#39ff14',  // Pastelliges Orange für Double
+      triple: '#ff073a',  // Kräftiges Orange-Rot für Triple
     },
   };

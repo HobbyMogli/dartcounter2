@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { colors } from '../../styles/theme/colors';
+import { ArrowUturnLeftIcon } from '@heroicons/react/24/outline';
 
 interface DartKeypadProps {
   onScore: (score: number, multiplier: number, targetNumber?: number, isBull?: boolean) => void;
@@ -43,14 +44,16 @@ export const DartKeypad: React.FC<DartKeypadProps> = ({ onScore, onUndo, showMul
     .map((number) => (
       <div key={number} className="relative">
         <button
-          className={`w-full h-full bg-dark-700/70 hover:bg-dark-600/70 backdrop-blur-md rounded-lg text-gray-100 p-4 text-xl font-bold transition-all duration-300 ${
-            multiplier === 2 ? `border border-[${colors.darts.double}]` : 
-            multiplier === 3 ? `border border-[${colors.darts.triple}]` : 
-            'border border-gray-600'
+          className={`w-full h-full bg-dark-700/70 hover:bg-dark-600/70 backdrop-blur-md rounded-lg text-gray-100 p-4 text-xl font-bold transition-shadow duration-150 ease-in-out ${
+            multiplier === 2 ? `border border-[${colors.neon.orange}]` : 
+            multiplier === 3 ? `border border-[${colors.neon.red}]` : 
+            'border border-gray-500'
           }`}
           style={{
-            boxShadow: multiplier === 2 ? `inset 0 0 5px 0 ${colors.darts.double}` : 
-                      multiplier === 3 ? `inset 0 0 8px 0 ${colors.darts.triple}` : 'none'
+            // Apply default neon blue shadow, override with stronger darts color if multiplier active
+            boxShadow: multiplier === 3 ? `inset 0 0 16px 0 ${colors.darts.triple}` : // Triple active: 16px triple color
+                      multiplier === 2 ? `inset 0 0 12px 0 ${colors.darts.double}` : // Double active: 12px double color
+                                         `inset 0 0 8px 0 ${colors.neon.blue}` // Default: 5px neon blue
           }}
           onClick={() => handleNumberClick(number)}
         >
@@ -58,8 +61,8 @@ export const DartKeypad: React.FC<DartKeypadProps> = ({ onScore, onUndo, showMul
             <div className="text-center">{number}</div>
             {showMultipliedValues && multiplier > 1 && (
               <span className={`absolute right-0 top-1/2 -translate-y-1/2 text-sm ${
-                multiplier === 2 ? `text-[${colors.darts.double}]` : 
-                `text-[${colors.darts.triple}]`
+                multiplier === 2 ? `text-[${colors.neon.orange}]` : 
+                `text-[${colors.neon.red}]`
               }`}>
                 ({number * multiplier})
               </span>
@@ -79,15 +82,21 @@ export const DartKeypad: React.FC<DartKeypadProps> = ({ onScore, onUndo, showMul
       {/* Bottom row */}
       <div className="relative">
         <button
-          className="w-full h-full bg-dark-700/70 hover:bg-dark-600/70 backdrop-blur-md border border-gray-600 rounded-lg text-gray-100 p-4 text-xl font-bold transition-colors"
+          className={`w-full h-full bg-[${colors.warning.light}] hover:brightness-90 backdrop-blur-md border border-[${colors.warning.light}] rounded-lg text-gray-100 p-4 text-xl font-bold transition-all duration-300 flex items-center justify-center`}
+          style={{
+            boxShadow: `inset 0 0 12px 1px ${colors.warning.light}`
+          }}
           onClick={handleUndo}
         >
-          Undo
+          <ArrowUturnLeftIcon className="w-6 h-6" />
         </button>
       </div>
       <div className="relative">
         <button
-          className="w-full h-full bg-dark-700/70 hover:bg-dark-600/70 backdrop-blur-md border border-gray-600 rounded-lg text-gray-100 p-4 text-xl font-bold transition-colors"
+          className={`w-full h-full bg-[${colors.warning.dark}] hover:brightness-95 backdrop-blur-md border border-[${colors.warning.dark}] rounded-lg text-gray-100 p-4 text-xl font-bold transition-all duration-300`}
+          style={{
+            boxShadow: `inset 0 0 12px 1px ${colors.warning.dark}`
+          }}
           onClick={handleMiss}
         >
           Miss
@@ -99,7 +108,8 @@ export const DartKeypad: React.FC<DartKeypadProps> = ({ onScore, onUndo, showMul
             multiplier === 2 ? `bg-[${colors.darts.double}]` : 'bg-dark-700/70'
           } hover:brightness-90 backdrop-blur-md border border-[${colors.darts.double}] rounded-lg text-gray-100 p-4 text-xl font-bold transition-all duration-300`}
           style={{
-            boxShadow: `inset 0 0 5px 0 ${colors.darts.double}`
+            boxShadow: multiplier === 2 ? `inset 0 0 16px 4px ${colors.darts.double}` : 
+                      `inset 0 0 12px 5px ${colors.darts.double}80`
           }}
           onClick={handleDouble}
         >
@@ -112,7 +122,8 @@ export const DartKeypad: React.FC<DartKeypadProps> = ({ onScore, onUndo, showMul
             multiplier === 3 ? `bg-[${colors.darts.triple}]` : 'bg-dark-700/70'
           } hover:brightness-90 backdrop-blur-md border border-[${colors.darts.triple}] rounded-lg text-gray-100 p-4 text-xl font-bold transition-all duration-300`}
           style={{
-            boxShadow: `inset 0 0 8px 0 ${colors.darts.triple}`
+            boxShadow: multiplier === 3 ? `inset 0 0 16px 4px ${colors.darts.triple}` : 
+                      `inset 0 0 12px 5px ${colors.darts.triple}80`
           }}
           onClick={handleTriple}
         >
@@ -122,18 +133,20 @@ export const DartKeypad: React.FC<DartKeypadProps> = ({ onScore, onUndo, showMul
       <div className="relative">
         <button
           className={`w-full h-full bg-dark-700/70 hover:bg-dark-600/70 backdrop-blur-md rounded-lg text-gray-100 p-4 text-xl font-bold transition-all duration-300 ${
-            multiplier === 2 ? `border border-[${colors.darts.double}]` : 
+            multiplier === 2 ? `border border-[${colors.neon.orange}]` : 
             'border border-gray-600'
           }`}
           style={{
-            boxShadow: multiplier === 2 ? `inset 0 0 5px 0 ${colors.darts.double}` : 'none'
+            // Apply default neon blue shadow, override with stronger double color if multiplier active
+            boxShadow: multiplier === 2 ? `inset 0 0 12px 0 ${colors.darts.double}` : // Double active: 12px double color
+                                         `inset 0 0 8px 0 ${colors.neon.blue}` // Default: 5px neon blue
           }}
           onClick={handleBull}
         >
           <div className="relative w-full">
             <div className="text-center">25</div>
             {showMultipliedValues && multiplier === 2 && (
-              <span className={`absolute right-0 top-1/2 -translate-y-1/2 text-sm text-[${colors.darts.double}]`}>
+              <span className={`absolute right-0 top-1/2 -translate-y-1/2 text-sm text-[${colors.neon.orange}]`}>
                 (50)
               </span>
             )}

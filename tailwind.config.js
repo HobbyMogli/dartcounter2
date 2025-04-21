@@ -19,8 +19,14 @@ export default {
             600: '#2d2d2d',
           },
         },
+        boxShadowColor: {
+          'neon-blue': '#00f2ff',
+          'neon-pink': '#ff00ff',
+          'neon-red': '#ff0033',
+        },
         boxShadow: {
-          'neon-blue': '0 0 10px #00f2ff, 0 0 20px rgba(0, 242, 255, 0.3)',
+          'neon-blue-inactive': '0 0 8px rgba(0, 242, 255, 0.4)',
+          'neon-blue-active': '0 0 25px #00f2ff, 0 0 30px rgba(0, 242, 255, 0.5)',
           'neon-pink': '0 0 10px #ff00ff, 0 0 20px rgba(255, 0, 255, 0.3)',
           'neon-red': '0 0 10px #ff0033, 0 0 20px rgba(255, 0, 51, 0.3)',
         },

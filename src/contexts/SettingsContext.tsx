@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState } from 'react';
 interface SettingsContextType {
   showMultipliedValues: boolean;
   showStatistics: boolean;
+  highlightCurrentDart: boolean;
   showLastThrowSum: boolean;
   showThrowHistory: boolean;
   showDebugInfo: boolean;
@@ -12,6 +13,7 @@ interface SettingsContextType {
 const defaultSettings: SettingsContextType = {
   showMultipliedValues: true,
   showStatistics: true,
+  highlightCurrentDart: true,
   showLastThrowSum: true,
   showThrowHistory: true,
   showDebugInfo: false,

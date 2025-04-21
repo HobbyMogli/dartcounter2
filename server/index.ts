@@ -694,7 +694,7 @@ app.get('/api/games/:gameId/player-throws/:playerId', async (req: Request, res: 
         usedFallback = true;
         console.log(`[player-throws] Found most recent round: ${effectiveRound}`);
         
-        // Now get throws from that round for THIS PLAYER
+        // Now get throws from that round for THIS PLAYER, including multiplier
         roundThrows = await prisma.throw.findMany({
           where: {
             gameId,
@@ -703,11 +703,17 @@ app.get('/api/games/:gameId/player-throws/:playerId', async (req: Request, res: 
           },
           orderBy: {
             dartNumber: 'asc'
-          }
+          },
+          select: { // Select specific fields including multiplier
+            score: true,
+            multiplier: true,
+            dartNumber: true,
+            busted: true
+          } 
         });
         
         console.log(`[player-throws] Using throws from round ${effectiveRound} as fallback:`,
-          roundThrows.map(t => ({ dart: t.dartNumber, score: t.score, busted: t.busted })));
+          roundThrows.map(t => ({ dart: t.dartNumber, score: t.score, busted: t.busted, multiplier: t.multiplier })));
       }
     } else {
       // If fallback is disabled and there are no throws, we'll return empty throws
@@ -715,7 +721,7 @@ app.get('/api/games/:gameId/player-throws/:playerId', async (req: Request, res: 
         console.log(`[player-throws] No throws in requested round ${targetRound} and fallback disabled, returning empty array`);
         roundThrows = [];
       } else {
-        // Fetch throws for the specific round - EXPLICITLY restrict to the exact round for THIS PLAYER
+        // Fetch throws for the specific round, including multiplier - EXPLICITLY restrict to the exact round for THIS PLAYER
         roundThrows = await prisma.throw.findMany({
           where: {
             gameId,
@@ -726,16 +732,23 @@ app.get('/api/games/:gameId/player-throws/:playerId', async (req: Request, res: 
           },
           orderBy: {
             dartNumber: 'asc'
-          }
+          },
+          select: { // Select specific fields including multiplier
+            score: true,
+            multiplier: true,
+            dartNumber: true,
+            roundNumber: true, // Keep round number for logging
+            busted: true
+          } 
         });
 
         console.log(`[player-throws] Found ${roundThrows.length} throws for EXACT round ${targetRound}:`, 
-          roundThrows.map(t => ({ dart: t.dartNumber, score: t.score, round: t.roundNumber, busted: t.busted })));
+          roundThrows.map(t => ({ dart: t.dartNumber, score: t.score, round: t.roundNumber, busted: t.busted, multiplier: t.multiplier })));
       }
     }
 
     // Create an array with 3 positions (for dart 1, 2, 3)
-    const formattedThrows: (number | null)[] = [null, null, null];
+    const formattedThrows: ({ score: number; multiplier: number } | null)[] = [null, null, null];
     
     // Ensure throws are positioned correctly in the array based on their dartNumber
     if (roundThrows && roundThrows.length > 0) {
@@ -749,11 +762,11 @@ app.get('/api/games/:gameId/player-throws/:playerId', async (req: Request, res: 
           // Position in array is dartNumber - 1 (so dart 1 goes in position 0)
           const arrayPosition = throw_.dartNumber - 1;
           
-          // If busted, store negative value to indicate bust
+          // If busted, store score as negative value but keep the multiplier
           if (throw_.busted) {
-            formattedThrows[arrayPosition] = throw_.score * -1;
+            formattedThrows[arrayPosition] = { score: throw_.score * -1, multiplier: throw_.multiplier };
           } else {
-            formattedThrows[arrayPosition] = throw_.score;
+            formattedThrows[arrayPosition] = { score: throw_.score, multiplier: throw_.multiplier };
           }
         }
       }
@@ -804,7 +817,8 @@ app.get('/api/games/:gameId/player-throws/:playerId', async (req: Request, res: 
           dart: t.dartNumber, 
           score: t.score, 
           round: t.roundNumber,
-          busted: t.busted 
+          busted: t.busted,
+          multiplier: t.multiplier
         })) || []
       }
     });
