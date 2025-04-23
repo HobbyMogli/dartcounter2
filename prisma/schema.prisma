@@ -16,42 +16,45 @@ datasource db {
 
 // Spieler-Modell
 model Player {
-  id                Int          @id @default(autoincrement())
-  name             String      @unique
-  nickname         String?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime?   @updatedAt
-  gamesPlayed      Int          @default(0)
-  gamesWon         Int          @default(0)
-  averageScore     Float        @default(0)
-  highestScore     Int          @default(0)
-  checkoutPercentage Float       @default(0)
-  favoriteDouble   Int?
-  profileImage     String?
-  throws           Throw[]
-  gamePlayers      GamePlayer[] @relation("PlayerGamePlayers")
-  statistics       PlayerStatistics?
-  wonGames         Game[]       @relation("GameWinner")
-  
+  id                 Int               @id @default(autoincrement())
+  name               String            @unique
+  nickname           String?
+  gamesPlayed        Int               @default(0)
+  gamesWon           Int               @default(0)
+  averageScore       Float             @default(0)
+  highestScore       Int               @default(0)
+  checkoutPercentage Float             @default(0)
+  favoriteDouble     Int? // Will be calculated from winningDoubles relation
+  profileImage       String?
+  throws             Throw[]
+  gamePlayers        GamePlayer[]      @relation("PlayerGamePlayers")
+  statistics         PlayerStatistics?
+  wonGames           Game[]            @relation("GameWinner", fields: [id], references: [winnerId]) @filter(where: { isFinished: true })
+  winningDoubles     WinningDouble[] // New relation to WinningDouble model
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime?         @updatedAt
+
   @@map("players")
 }
 
 // Spiel-Modell
 model Game {
-  id                Int      @id @default(autoincrement())
-  gameType          String
-  startTime         DateTime @default(now())
-  endTime           DateTime?
-  status            String   @default("ongoing")
-  score             Int      @default(501)
-  isFinished        Boolean  @default(false)
-  settings          String
-  winner            Player?  @relation("GameWinner", fields: [winnerId], references: [id])
-  winnerId          Int?
-  players           GamePlayer[]
-  throws            Throw[]
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime? @updatedAt
+  id               Int             @id @default(autoincrement())
+  gameType         String
+  settings         String
+  startingScore    Int             @default(501) // renamed from score
+  status           String          @default("ongoing")
+  isFinished       Boolean         @default(false)
+  winner           Player?         @relation("GameWinner", fields: [winnerId], references: [id], onDelete: SetNull)
+  winnerId         Int?
+  winnerPlayerName String? // Renamed from winnerName for clarity
+  players          GamePlayer[]
+  throws           Throw[]
+  winningDoubles   WinningDouble[] // Add this relation
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime?       @updatedAt
+  startTime        DateTime        @default(now())
+  endTime          DateTime?
 
   @@index([winnerId])
   @@map("games")
@@ -59,51 +62,67 @@ model Game {
 
 // Spieler-Spiel-Verbindung
 model GamePlayer {
-  id                Int      @id @default(autoincrement())
-  game             Game     @relation(fields: [gameId], references: [id])
-  gameId           Int
-  player           Player   @relation("PlayerGamePlayers", fields: [playerId], references: [id])
-  playerId         Int
-  position         Int      // Spielerreihenfolge
-  finalScore       Int?
-  averageScore     Float    @default(0)
-  highestScore     Int      @default(0)
-  checkoutPercentage Float   @default(0)
-  
+  id                 Int    @id @default(autoincrement())
+  game               Game   @relation(fields: [gameId], references: [id])
+  gameId             Int
+  player             Player @relation("PlayerGamePlayers", fields: [playerId], references: [id])
+  playerId           Int
+  position           Int // Spielerreihenfolge
+  finalScore         Int?
+  averageScore       Float  @default(0)
+  highestScore       Int    @default(0)
+  checkoutPercentage Float  @default(0)
+
   @@unique([gameId, playerId])
   @@map("game_players")
 }
 
 // Wurf-Modell
 model Throw {
-  id            Int      @id @default(autoincrement())
-  game          Game     @relation(fields: [gameId], references: [id])
-  gameId        Int
-  player        Player   @relation(fields: [playerId], references: [id])
-  playerId      Int
-  roundNumber   Int
-  dartNumber    Int      // 1, 2 oder 3 für den Wurf in der Runde
-  score         Int
-  multiplier    Int      // 1, 2 oder 3
-  targetNumber  Int?     // Welche Zahl wurde getroffen
-  isBull        Boolean  // War es ein Bull?
-  busted        Boolean  @default(false) // Indicates if this throw was part of a busted round
-  createdAt     DateTime @default(now())
+  id             Int      @id @default(autoincrement())
+  game           Game     @relation(fields: [gameId], references: [id])
+  gameId         Int
+  player         Player   @relation(fields: [playerId], references: [id])
+  playerId       Int
+  roundNumber    Int
+  dartNumber     Int // 1, 2 oder 3 für den Wurf in der Runde
+  score          Int
+  multiplier     Int // 1, 2 oder 3
+  targetNumber   Int? // Welche Zahl wurde getroffen
+  isBull         Boolean // War es ein Bull?
+  busted         Boolean  @default(false) // Indicates if this throw was part of a busted round
+  isWinningThrow Boolean  @default(false) // New field to mark the winning throw
+  createdAt      DateTime @default(now())
 
   @@index([gameId])
   @@index([playerId])
   @@map("throws")
 }
 
+// New model for tracking winning doubles
+model WinningDouble {
+  id        Int      @id @default(autoincrement())
+  player    Player   @relation(fields: [playerId], references: [id])
+  playerId  Int
+  value     Int // The actual double value
+  game      Game     @relation(fields: [gameId], references: [id])
+  gameId    Int
+  createdAt DateTime @default(now())
+
+  @@index([playerId])
+  @@index([gameId])
+  @@map("winning_doubles")
+}
+
 model PlayerStatistics {
-  id                Int      @id @default(autoincrement())
-  playerId          Int      @unique
-  player            Player   @relation(fields: [playerId], references: [id])
-  gamesPlayed       Int      @default(0)
-  gamesWon          Int      @default(0)
-  highestCheckout   Int      @default(0)
-  average           Float    @default(0)
-  checkoutPercentage Float   @default(0)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime? @updatedAt
+  id                 Int       @id @default(autoincrement())
+  playerId           Int       @unique
+  player             Player    @relation(fields: [playerId], references: [id])
+  gamesPlayed        Int       @default(0)
+  gamesWon           Int       @default(0)
+  highestCheckout    Int       @default(0)
+  average            Float     @default(0)
+  checkoutPercentage Float     @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime? @updatedAt
 }

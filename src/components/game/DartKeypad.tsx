@@ -44,7 +44,7 @@ export const DartKeypad: React.FC<DartKeypadProps> = ({ onScore, onUndo, showMul
     .map((number) => (
       <div key={number} className="relative">
         <button
-          className={`w-full h-full bg-dark-700/70 hover:bg-dark-600/70 backdrop-blur-md rounded-lg text-gray-100 p-4 text-xl font-bold transition-shadow duration-150 ease-in-out 
+          className={`w-full h-16 bg-dark-700/70 hover:bg-dark-600/70 backdrop-blur-md rounded-lg text-gray-100 p-2 text-xl font-bold transition-shadow duration-150 ease-in-out flex flex-col items-center justify-center
             ${
               multiplier === 2 ? 'border border-darts-double' : 
               multiplier === 3 ? 'border border-darts-triple' : 
@@ -58,24 +58,21 @@ export const DartKeypad: React.FC<DartKeypadProps> = ({ onScore, onUndo, showMul
           `}
           onClick={() => handleNumberClick(number)}
         >
-          <div className="relative w-full">
-            <div className="text-center">{number}</div>
-            {showMultipliedValues && multiplier > 1 && (
-              <span className={`absolute right-0 top-1/2 -translate-y-1/2 text-sm 
-                ${
-                  multiplier === 2 ? 'text-darts-double' : 'text-darts-triple'
-                }
-              `}>
-                ({number * multiplier})
-              </span>
-            )}
-          </div>
+          <div className="text-center transition-transform duration-200 ease-in-out">{number}</div>
+          <span className={`text-xs mt-0.5 overflow-hidden transition-all duration-200 ease-in-out 
+            ${showMultipliedValues && multiplier > 1 ? 'opacity-100 max-h-4' : 'opacity-0 max-h-0'}
+            ${
+              multiplier === 2 ? 'text-darts-double' : 'text-darts-triple'
+            }
+          `}>
+            ({number * multiplier})
+          </span>
         </button>
       </div>
     ));
 
   return (
-    <div className="grid grid-cols-5 gap-2 p-4 bg-dark-800/50 backdrop-blur-md rounded-lg">
+    <div className="grid grid-cols-5 gap-2 p-4 bg-gray-900/70 backdrop-blur-sm border border-neon-blue rounded-2xl shadow-neon-blue-inactive">
       {/* Number grid */}
       <div className="col-span-5 grid grid-cols-5 gap-2">
         {numberGrid}
@@ -84,7 +81,7 @@ export const DartKeypad: React.FC<DartKeypadProps> = ({ onScore, onUndo, showMul
       {/* Bottom row */}
       <div className="relative">
         <button
-          className={`w-full h-full bg-[${colors.warning.light}] hover:brightness-90 backdrop-blur-md border border-[${colors.warning.light}] rounded-lg text-gray-100 p-4 text-xl font-bold transition-all duration-300 flex items-center justify-center`}
+          className={`w-full h-16 bg-[${colors.warning.light}] hover:brightness-90 backdrop-blur-md border border-[${colors.warning.light}] rounded-lg text-gray-100 p-4 text-xl font-bold transition-all duration-300 flex items-center justify-center`}
           style={{
             boxShadow: `inset 0 0 12px 1px ${colors.warning.light}`
           }}
@@ -95,7 +92,7 @@ export const DartKeypad: React.FC<DartKeypadProps> = ({ onScore, onUndo, showMul
       </div>
       <div className="relative">
         <button
-          className={`w-full h-full bg-[${colors.warning.dark}] hover:brightness-95 backdrop-blur-md border border-[${colors.warning.dark}] rounded-lg text-gray-100 p-4 text-xl font-bold transition-all duration-300`}
+          className={`w-full h-16 bg-[${colors.warning.dark}] hover:brightness-95 backdrop-blur-md border border-[${colors.warning.dark}] rounded-lg text-gray-100 p-4 text-xl font-bold transition-all duration-300 flex items-center justify-center`}
           style={{
             boxShadow: `inset 0 0 12px 1px ${colors.warning.dark}`
           }}
@@ -106,9 +103,9 @@ export const DartKeypad: React.FC<DartKeypadProps> = ({ onScore, onUndo, showMul
       </div>
       <div className="relative">
         <button
-          className={`w-full h-full ${
+          className={`w-full h-16 ${
             multiplier === 2 ? `bg-[${colors.darts.double}]` : 'bg-dark-700/70'
-          } hover:brightness-90 backdrop-blur-md border border-[${colors.darts.double}] rounded-lg text-gray-100 p-4 text-xl font-bold transition-all duration-300`}
+          } hover:brightness-90 backdrop-blur-md border border-[${colors.darts.double}] rounded-lg text-gray-100 p-4 text-xl font-bold transition-all duration-300 flex items-center justify-center`}
           style={{
             boxShadow: multiplier === 2 ? `inset 0 0 16px 4px ${colors.darts.double}` : 
                       `inset 0 0 12px 5px ${colors.darts.double}80`
@@ -120,9 +117,9 @@ export const DartKeypad: React.FC<DartKeypadProps> = ({ onScore, onUndo, showMul
       </div>
       <div className="relative">
         <button
-          className={`w-full h-full ${
+          className={`w-full h-16 ${
             multiplier === 3 ? `bg-[${colors.darts.triple}]` : 'bg-dark-700/70'
-          } hover:brightness-90 backdrop-blur-md border border-[${colors.darts.triple}] rounded-lg text-gray-100 p-4 text-xl font-bold transition-all duration-300`}
+          } hover:brightness-90 backdrop-blur-md border border-[${colors.darts.triple}] rounded-lg text-gray-100 p-4 text-xl font-bold transition-all duration-300 flex items-center justify-center`}
           style={{
             boxShadow: multiplier === 3 ? `inset 0 0 16px 4px ${colors.darts.triple}` : 
                       `inset 0 0 12px 5px ${colors.darts.triple}80`
@@ -134,9 +131,9 @@ export const DartKeypad: React.FC<DartKeypadProps> = ({ onScore, onUndo, showMul
       </div>
       <div className="relative">
         <button
-          className={`w-full h-full bg-dark-700/70 hover:bg-dark-600/70 backdrop-blur-md rounded-lg text-gray-100 p-4 text-xl font-bold transition-shadow duration-150 ease-in-out 
+          className={`w-full h-16 bg-dark-700/70 hover:bg-dark-600/70 backdrop-blur-md rounded-lg text-gray-100 p-2 text-xl font-bold transition-shadow duration-150 ease-in-out flex flex-col items-center justify-center
             ${
-              multiplier === 2 ? 'border border-neon-orange' : 'border border-gray-600'
+              multiplier === 2 ? 'border border-darts-double' : 'border border-gray-600'
             }
             ${
               multiplier === 2 ? 'shadow-inset-darts-double' : 'shadow-inset-neon-blue'
@@ -144,16 +141,15 @@ export const DartKeypad: React.FC<DartKeypadProps> = ({ onScore, onUndo, showMul
           `}
           onClick={handleBull}
         >
-          <div className="relative w-full">
-            <div className="text-center">25</div>
-            {showMultipliedValues && multiplier === 2 && (
-              <span className={`absolute right-0 top-1/2 -translate-y-1/2 text-sm text-neon-orange`}>
-                (50)
-              </span>
-            )}
-          </div>
+          <div className="text-center transition-transform duration-200 ease-in-out">25</div>
+          <span className={`text-xs mt-0.5 overflow-hidden transition-all duration-200 ease-in-out 
+            ${showMultipliedValues && multiplier === 2 ? 'opacity-100 max-h-4' : 'opacity-0 max-h-0'}
+            text-darts-double
+          `}>
+            (50)
+          </span>
         </button>
       </div>
     </div>
   );
-}; 
+};

@@ -5,8 +5,7 @@ import {
   Player,
   PlayerStatistics 
 } from './types';
-
-const API_URL = 'http://localhost:3001/api';
+import { API_URL } from './api.ts';
 
 export const playerService: PlayerService = {
   // Spieler erstellen
@@ -68,14 +67,29 @@ export const playerService: PlayerService = {
   },
 
   // Spieler löschen
-  async deletePlayer(playerId: number): Promise<void> {
-    const response = await fetch(`${API_URL}/players/${playerId}`, {
-      method: 'DELETE'
+  async deletePlayer(id: number): Promise<void> {
+    const response = await fetch(`${API_URL}/players/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json'
+      }
     });
-    
+
     if (!response.ok) {
-      throw new Error('Failed to delete player');
+      // For status 204 (no content), treat as success
+      if (response.status === 204) {
+        return;
+      }
+      // Otherwise try to get error details
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(`Failed to delete player: ${errorData.error}`);
     }
+    // For successful deletion with no content
+    if (response.status === 204) {
+      return;
+    }
+    // If there's content, parse it (though we don't expect any for DELETE)
+    await response.json();
   },
 
   // Spielerstatistiken aktualisieren

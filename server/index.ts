@@ -1,265 +1,41 @@
 import express from 'express';
 import cors from 'cors';
-import { PrismaClient } from '@prisma/client';
+import pkg from '@prisma/client'; // Import using pkg for types
+const { PrismaClient } = pkg; // Destructure value
 import path from 'path';
 import type { Request, Response, RequestHandler } from 'express';
+import { isX01CheckoutPossible, isX01CheckoutScoreValid } from './game-modes/x01/logic.js'; // Use .js extension
+import { x01Routes } from './game-modes/x01/routes.js'; // Use .js extension
 
 const app = express();
 const prisma = new PrismaClient();
 const port = 3001; // Behalten Sie 3001 für den API-Server
 
 app.use(cors({
-  origin: 'http://localhost:5173', // Vite Dev Server Port
+  origin: 'http://localhost:5173', // Explicitly allow the frontend origin
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type']
+  allowedHeaders: ['Content-Type'], // Specify allowed headers if needed, Content-Type is common
+  credentials: false
 }));
 
 app.use(express.json());
+
+// Mount X01 game mode routes
+app.use('/api/x01', x01Routes);
 
 // Favicon-Route hinzufügen
 app.get('/favicon.ico', (req: Request, res: Response): void => {
   res.status(204).end(); // Sende "No Content" für Favicon-Anfragen
 });
 
-// GET /api/players - Alle Spieler abrufen
-app.get('/api/players', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const players = await prisma.player.findMany();
-    res.json(players);
-  } catch (error) {
-    console.error('Error fetching players:', error);
-    res.status(500).json({ error: 'Could not fetch players' });
-  }
-});
+// Legacy functions temporarily kept for backward compatibility
+function isCheckoutPossible(score: number, checkoutRule: string): boolean {
+  return isX01CheckoutPossible(score, checkoutRule as any);
+}
 
-// POST /api/players - Neuen Spieler erstellen
-app.post('/api/players', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { name, nickname, statistics } = req.body;
-    const player = await prisma.player.create({
-      data: {
-        name,
-        nickname,
-        gamesPlayed: statistics?.gamesPlayed ?? 0,
-        gamesWon: statistics?.gamesWon ?? 0,
-        averageScore: statistics?.averageScore ?? 0,
-        highestScore: statistics?.highestScore ?? 0,
-        checkoutPercentage: statistics?.checkoutPercentage ?? 0
-      }
-    });
-    res.json(player);
-  } catch (error) {
-    console.error('Error creating player:', error);
-    res.status(500).json({ error: 'Could not create player' });
-  }
-});
-
-// PUT /api/players/:id - Spieler aktualisieren
-app.put('/api/players/:id', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const playerId = parseInt(req.params.id);
-    const { name, nickname } = req.body;
-
-    // Überprüfen, ob der Spieler existiert
-    const existingPlayer = await prisma.player.findUnique({
-      where: { id: playerId }
-    });
-
-    if (!existingPlayer) {
-      res.status(404).json({ error: 'Player not found' });
-      return;
-    }
-
-    const updatedPlayer = await prisma.player.update({
-      where: { id: playerId },
-      data: {
-        name,
-        nickname
-      }
-    });
-
-    res.json(updatedPlayer);
-  } catch (error) {
-    console.error('Error updating player:', error);
-    res.status(500).json({ error: 'Could not update player' });
-  }
-});
-
-// DELETE /api/players/:id - Spieler löschen
-app.delete('/api/players/:id', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const playerId = parseInt(req.params.id);
-
-    // Überprüfen, ob der Spieler existiert
-    const existingPlayer = await prisma.player.findUnique({
-      where: { id: playerId }
-    });
-
-    if (!existingPlayer) {
-      res.status(404).json({ error: 'Player not found' });
-      return;
-    }
-
-    // Löschen aller verknüpften GamePlayer-Einträge
-    await prisma.gamePlayer.deleteMany({
-      where: { playerId }
-    });
-
-    // Löschen aller verknüpften Throws
-    await prisma.throw.deleteMany({
-      where: { playerId }
-    });
-
-    // Setze winnerId auf null in allen Spielen, wo dieser Spieler gewonnen hat
-    await prisma.game.updateMany({
-      where: { winnerId: playerId },
-      data: { winnerId: null }
-    });
-
-    // Spieler löschen
-    await prisma.player.delete({
-      where: { id: playerId }
-    });
-
-    res.status(204).end();
-  } catch (error) {
-    console.error('Error deleting player:', error);
-    res.status(500).json({ error: 'Could not delete player' });
-  }
-});
-
-// POST /api/games - Neues Spiel erstellen
-app.post('/api/games', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { playerIds, gameType, startingScore, settings } = req.body;
-    const game = await prisma.game.create({
-      data: {
-        gameType,
-        startTime: new Date(),
-        score: startingScore,
-        settings: JSON.stringify(settings),
-        isFinished: false,
-        players: {
-          create: playerIds.map((playerId: number, index: number) => ({
-            playerId,
-            position: index + 1
-          }))
-        }
-      },
-      include: {
-        players: true
-      }
-    });
-    res.json(game);
-  } catch (error) {
-    console.error('Error creating game:', error);
-    res.status(500).json({ error: 'Could not create game' });
-  }
-});
-
-// POST /api/throws - Neuen Wurf registrieren
-app.post('/api/throws', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { gameId, playerId, roundNumber, dartNumber, score, multiplier, targetNumber, isBull } = req.body;
-    const throwData = await prisma.throw.create({
-      data: {
-        gameId,
-        playerId,
-        roundNumber,
-        dartNumber,
-        score,
-        multiplier,
-        targetNumber,
-        isBull
-      }
-    });
-    res.json(throwData);
-  } catch (error) {
-    console.error('Error registering throw:', error);
-    res.status(500).json({ error: 'Could not register throw' });
-  }
-});
-
-// DELETE /api/throws/:id - Wurf löschen
-app.delete('/api/throws/:id', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const throwId = parseInt(req.params.id);
-    await prisma.throw.delete({
-      where: { id: throwId }
-    });
-    res.status(204).end();
-  } catch (error) {
-    console.error('Error deleting throw:', error);
-    res.status(500).json({ error: 'Could not delete throw' });
-  }
-});
-
-// GET /api/throws/:id - Get throw details
-app.get('/api/throws/:id', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const throwId = parseInt(req.params.id);
-    const throwData = await prisma.throw.findUnique({
-      where: { id: throwId }
-    });
-    
-    if (!throwData) {
-      res.status(404).json({ error: 'Throw not found' });
-      return;
-    }
-    
-    console.log(`[get-throw] Retrieved throw ID ${throwId}:`, throwData);
-    res.json(throwData);
-  } catch (error) {
-    console.error('Error getting throw:', error);
-    res.status(500).json({ error: 'Could not get throw' });
-  }
-});
-
-// POST /api/games/:id/end - Spiel beenden
-app.post('/api/games/:id/end', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const gameId = parseInt(req.params.id);
-    const { finalScore } = req.body;
-    const game = await prisma.game.update({
-      where: { id: gameId },
-      data: {
-        endTime: new Date(),
-        score: finalScore,
-        isFinished: true
-      }
-    });
-    
-    // Update player statistics for all players in the game
-    await updatePlayerStatisticsForGame(gameId);
-    
-    res.json(game);
-  } catch (error) {
-    console.error('Error ending game:', error);
-    res.status(500).json({ error: 'Could not end game' });
-  }
-});
-
-// PUT /api/games/:id/winner - Set the winner of a game
-app.put('/api/games/:id/winner', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const gameId = parseInt(req.params.id);
-    const { winnerId } = req.body;
-    
-    // Update the game with the winner ID
-    const game = await prisma.game.update({
-      where: { id: gameId },
-      data: {
-        winnerId
-      }
-    });
-    
-    console.log(`[setGameWinner] Set winner ${winnerId} for game ${gameId}`);
-    res.json(game);
-  } catch (error) {
-    console.error('Error setting game winner:', error);
-    res.status(500).json({ error: 'Could not set game winner' });
-  }
-});
+function isCheckoutScoreValid(score: number, checkoutRule: string): boolean {
+  return isX01CheckoutScoreValid(score, checkoutRule as any);
+}
 
 // Function to update player statistics when a game ends
 async function updatePlayerStatisticsForGame(gameId: number) {
@@ -291,6 +67,9 @@ async function updatePlayerStatisticsForGame(gameId: number) {
 
     // Get the winner if available
     const winnerId = game.winnerId;
+
+    // Get checkout rule from game settings
+    const checkoutRule = game.settings.includes('"checkOut":"triple"') ? 'triple' : 'double';
 
     // Group throws by player
     const playerThrows = new Map<number, any[]>();
@@ -324,62 +103,82 @@ async function updatePlayerStatisticsForGame(gameId: number) {
       let highestRoundScore = 0;
       let checkoutOpportunities = 0;
       let successfulCheckouts = 0;
-      const doubleCounts = new Map<number, number>();
+      let isValidCheckoutSequence = true; // Track if player is still in valid sequence
       
-      // Count total rounds and analyze throws
-      rounds.forEach((roundThrows, roundNum) => {
-        if (roundThrows.length === 3) {
-          completeRounds++;
-          const roundScore = roundThrows.reduce((sum, t) => sum + t.score, 0);
-          totalPointsInCompleteRounds += roundScore;
-          
-          if (roundScore > highestRoundScore) {
-            highestRoundScore = roundScore;
-          }
-          
-          // Check for checkout opportunities and successful checkouts
-          const lastThrow = roundThrows[roundThrows.length - 1];
-          
-          // If double-out rule and the throw was a double
-          if (game.settings.includes('"checkOut":"double"') && lastThrow.multiplier === 2) {
-            // Check if this was a checkout throw
-            const targetNumber = lastThrow.targetNumber || (lastThrow.score / lastThrow.multiplier);
-            doubleCounts.set(targetNumber, (doubleCounts.get(targetNumber) || 0) + 1);
-            
-            // If game ended with this throw, it was a successful checkout
-            if (winnerId === playerId) {
+      // Track the running score for the player
+      let remainingScore = game.startingScore;
+
+      // Sort rounds to process them in order
+      const sortedRounds = Array.from(rounds.entries()).sort(([a], [b]) => a - b);
+      
+      for (const [roundNum, roundThrows] of sortedRounds) {
+        if (!isValidCheckoutSequence) break; // Stop if player has busted
+        
+        // Only consider checkout opportunities if starting score is valid
+        if (isCheckoutScoreValid(remainingScore, checkoutRule)) {
+          // Check if this round had any valid throws
+          const validThrows = roundThrows.filter(t => !t.busted);
+          if (validThrows.length > 0) {
+            checkoutOpportunities++;
+            if (validThrows.some(t => t.isWinningThrow)) {
               successfulCheckouts++;
             }
           }
-          
-          // Check if it was a checkout opportunity
-          // (this is a simplification - we'd need to know the score before the throw to be more accurate)
-          if (lastThrow.score <= 50 && lastThrow.multiplier === 2) { // Assuming 50 is maximum checkout
-            checkoutOpportunities++;
+        }
+
+        // Process throws and update remaining score
+        for (const t of roundThrows) {
+          if (t.busted) {
+            isValidCheckoutSequence = false;
+            break;
           }
+          remainingScore -= t.score;
         }
-      });
-      
-      // Find the favorite double
-      let favoriteDouble: number | null = null;
-      let maxCount = 0;
-      doubleCounts.forEach((count, number) => {
-        if (count > maxCount) {
-          maxCount = count;
-          favoriteDouble = number;
-        }
-      });
-      
-      // Calculate 3-dart average
-      const threeDartAverage = completeRounds > 0 
-        ? totalPointsInCompleteRounds / completeRounds 
-        : 0;
-      
-      // Calculate checkout percentage
+
+        console.log(`[updatePlayerStats] Round ${roundNum}: Score=${remainingScore}, Opportunities=${checkoutOpportunities}, Successes=${successfulCheckouts}`);
+      }
+
+      // Calculate checkout percentage only if there were opportunities
       const checkoutPercentage = checkoutOpportunities > 0 
         ? (successfulCheckouts / checkoutOpportunities) * 100 
-        : 0;
-      
+        : player.checkoutPercentage; // Keep existing percentage if no new opportunities
+
+      // Log for debugging
+      console.log(`[updatePlayerStats] Final stats for player ${playerId}:`, {
+        opportunities: checkoutOpportunities,
+        successes: successfulCheckouts,
+        percentage: checkoutPercentage,
+        validSequence: isValidCheckoutSequence
+      });
+
+      // Get ALL winning doubles for this player across all games
+      const allWinningDoubles = await prisma.winningDouble.findMany({
+        where: {
+          playerId
+        }
+      });
+
+      // Count occurrences of each double
+      const doubleCounts = new Map<number, number>();
+      allWinningDoubles.forEach(wd => {
+        doubleCounts.set(wd.value, (doubleCounts.get(wd.value) || 0) + 1);
+      });
+
+      // Find the most frequent double
+      let favoriteDouble: number | null = null;
+      let maxCount = 0;
+      doubleCounts.forEach((count, value) => {
+        if (count > maxCount) {
+          maxCount = count;
+          favoriteDouble = value;
+        }
+      });
+
+      console.log(`[updatePlayerStats] Player ${playerId} winning doubles:`, 
+        Object.fromEntries(doubleCounts.entries()),
+        `favorite: ${favoriteDouble} (used ${maxCount} times)`
+      );
+
       // Get existing player stats
       const existingPlayer = await prisma.player.findUnique({
         where: { id: playerId }
@@ -398,8 +197,8 @@ async function updatePlayerStatisticsForGame(gameId: number) {
           gamesWon: winnerId === playerId ? existingPlayer.gamesWon + 1 : existingPlayer.gamesWon,
           // Update average score as a weighted average of old and new
           averageScore: existingPlayer.gamesPlayed > 0 
-            ? ((existingPlayer.averageScore * existingPlayer.gamesPlayed) + threeDartAverage) / (existingPlayer.gamesPlayed + 1)
-            : threeDartAverage,
+            ? ((existingPlayer.averageScore * existingPlayer.gamesPlayed) + (totalPointsInCompleteRounds / completeRounds)) / (existingPlayer.gamesPlayed + 1)
+            : (totalPointsInCompleteRounds / completeRounds),
           // Update highest score if new is higher
           highestScore: Math.max(existingPlayer.highestScore, highestRoundScore),
           // Update checkout percentage as weighted average
@@ -423,9 +222,387 @@ async function updatePlayerStatisticsForGame(gameId: number) {
     
     console.log(`[updatePlayerStats] Completed updating player statistics for game ${gameId}`);
   } catch (error) {
-    console.error('[updatePlayerStats] Error updating player statistics:', error);
+    console.error('[updatePlayerStats] Error updating player statistics:', error instanceof Error ? error.message : error);
   }
 }
+
+// Define a type for the selected throw data
+type SelectedThrowData = {
+  score: number;
+  multiplier: number;
+  dartNumber: number;
+  busted: boolean;
+  roundNumber?: number; // Optional as it's not selected in all paths
+};
+
+// GET /api/players - Alle Spieler abrufen
+app.get('/api/players', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const players = await prisma.player.findMany();
+    res.json(players);
+  } catch (error) {
+    console.error('Error fetching players:', error instanceof Error ? error.message : error);
+    res.status(500).json({ error: 'Could not fetch players' });
+  }
+});
+
+// POST /api/players - Neuen Spieler erstellen
+app.post('/api/players', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { name, nickname, statistics } = req.body;
+    const player = await prisma.player.create({
+      data: {
+        name,
+        nickname,
+        gamesPlayed: statistics?.gamesPlayed ?? 0,
+        gamesWon: statistics?.gamesWon ?? 0,
+        averageScore: statistics?.averageScore ?? 0,
+        highestScore: statistics?.highestScore ?? 0,
+        checkoutPercentage: statistics?.checkoutPercentage ?? 0
+      }
+    });
+    res.json(player);
+  } catch (error) {
+    console.error('Error creating player:', error instanceof Error ? error.message : error);
+    res.status(500).json({ error: 'Could not create player' });
+  }
+});
+
+// PUT /api/players/:id - Spieler aktualisieren
+app.put('/api/players/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const playerId = parseInt(req.params.id);
+    const { name, nickname } = req.body;
+
+    // Überprüfen, ob der Spieler existiert
+    const existingPlayer = await prisma.player.findUnique({
+      where: { id: playerId }
+    });
+
+    if (!existingPlayer) {
+      res.status(404).json({ error: 'Player not found' });
+      return;
+    }
+
+    const updatedPlayer = await prisma.player.update({
+      where: { id: playerId },
+      data: {
+        name,
+        nickname
+      }
+    });
+
+    res.json(updatedPlayer);
+  } catch (error) {
+    console.error('Error updating player:', error instanceof Error ? error.message : error);
+    res.status(500).json({ error: 'Could not update player' });
+  }
+});
+
+// DELETE /api/players/:id - Spieler löschen
+app.delete('/api/players/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const playerId = parseInt(req.params.id);
+
+    // First check if player exists
+    const existingPlayer = await prisma.player.findUnique({
+      where: { id: playerId }
+    });
+
+    if (!existingPlayer) {
+      res.status(404).json({ error: 'Player not found' });
+      return;
+    }
+
+    // Perform deletions in correct order using a transaction
+    await prisma.$transaction(async (prisma) => {
+      // 1. Delete winning doubles
+      await prisma.winningDouble.deleteMany({
+        where: { playerId }
+      });
+
+      // 2. Delete player statistics
+      await prisma.playerStatistics.deleteMany({
+        where: { playerId }
+      });
+
+      // 3. Delete throws
+      await prisma.throw.deleteMany({
+        where: { playerId }
+      });
+
+      // 4. Delete game players
+      await prisma.gamePlayer.deleteMany({
+        where: { playerId }
+      });
+
+      // 5. Update games where this player was winner
+      await prisma.game.updateMany({
+        where: { winnerId: playerId },
+        data: { 
+          winnerId: null,
+          winnerPlayerName: null
+        }
+      });
+
+      // 6. Finally delete the player
+      await prisma.player.delete({
+        where: { id: playerId }
+      });
+    });
+
+    res.status(204).end();
+  } catch (error) {
+    console.error('Error deleting player:', error instanceof Error ? error.message : error);
+    res.status(500).json({ error: 'Could not delete player' });
+  }
+});
+
+// DELETE /api/games/:id - Spiel löschen
+app.delete('/api/games/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const gameId = parseInt(req.params.id);
+
+    // Check if the game exists
+    const existingGame = await prisma.game.findUnique({
+      where: { id: gameId },
+    });
+
+    if (!existingGame) {
+      res.status(404).json({ error: 'Game not found' });
+      return;
+    }
+
+    console.log(`[deleteGame] Attempting to delete game ${gameId}`);
+
+    // Perform deletions within a transaction
+    await prisma.$transaction(async (prisma) => {
+      console.log(`[deleteGame] Deleting throws for game ${gameId}`);
+      // 1. Delete throws associated with the game
+      await prisma.throw.deleteMany({
+        where: { gameId },
+      });
+
+      console.log(`[deleteGame] Deleting game players for game ${gameId}`);
+      // 2. Delete game players associated with the game
+      await prisma.gamePlayer.deleteMany({
+        where: { gameId },
+      });
+
+      console.log(`[deleteGame] Deleting winning doubles for game ${gameId}`);
+      // 3. Delete winning doubles associated with the game
+      await prisma.winningDouble.deleteMany({
+        where: { gameId },
+      });
+
+      console.log(`[deleteGame] Deleting game record ${gameId}`);
+      // 4. Finally, delete the game itself
+      await prisma.game.delete({
+        where: { id: gameId },
+      });
+    });
+
+    console.log(`[deleteGame] Successfully deleted game ${gameId} and related data.`);
+    res.status(204).end(); // No Content response for successful deletion
+  } catch (error) {
+    console.error('Error deleting game:', error instanceof Error ? error.message : error);
+    res.status(500).json({ error: 'Could not delete game' });
+  }
+});
+
+// POST /api/games - Neues Spiel erstellen
+app.post('/api/games', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { playerIds, gameType, startingScore, settings } = req.body;
+    
+    // Create game with explicit relations
+    const game = await prisma.game.create({
+      data: {
+        gameType,
+        startTime: new Date(),
+        startingScore,
+        settings: typeof settings === 'string' ? settings : JSON.stringify(settings),
+        isFinished: false,
+        status: 'ongoing',
+        players: {
+          create: playerIds.map((playerId: number, index: number) => ({
+            player: {
+              connect: { id: playerId }
+            },
+            position: index + 1,
+            averageScore: 0,
+            highestScore: 0,
+            checkoutPercentage: 0
+          }))
+        }
+      },
+      include: {
+        players: {
+          include: {
+            player: true
+          }
+        }
+      }
+    });
+
+    console.log(`Created game ${game.id} with players:`, game.players.map(gp => gp.player.name));
+    res.json(game);
+  } catch (error) {
+    console.error('Error creating game:', error instanceof Error ? error.message : error);
+    res.status(500).json({ error: 'Could not create game' });
+  }
+});
+
+// POST /api/throws - Neuen Wurf registrieren
+app.post('/api/throws', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { gameId, playerId, roundNumber, dartNumber, score, multiplier, targetNumber, isBull } = req.body;
+    const throwData = await prisma.throw.create({
+      data: {
+        gameId,
+        playerId,
+        roundNumber,
+        dartNumber,
+        score,
+        multiplier,
+        targetNumber,
+        isBull
+      }
+    });
+    res.json(throwData);
+  } catch (error) {
+    console.error('Error registering throw:', error instanceof Error ? error.message : error);
+    res.status(500).json({ error: 'Could not register throw' });
+  }
+});
+
+// DELETE /api/throws/:id - Wurf löschen
+app.delete('/api/throws/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const throwId = parseInt(req.params.id);
+    await prisma.throw.delete({
+      where: { id: throwId }
+    });
+    res.status(204).end();
+  } catch (error) {
+    console.error('Error deleting throw:', error instanceof Error ? error.message : error);
+    res.status(500).json({ error: 'Could not delete throw' });
+  }
+});
+
+// GET /api/throws/:id - Get throw details
+app.get('/api/throws/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const throwId = parseInt(req.params.id);
+    const throwData = await prisma.throw.findUnique({
+      where: { id: throwId }
+    });
+    
+    if (!throwData) {
+      res.status(404).json({ error: 'Throw not found' });
+      return;
+    }
+    
+    console.log(`[get-throw] Retrieved throw ID ${throwId}:`, throwData);
+    res.json(throwData);
+  } catch (error) {
+    console.error('Error getting throw:', error instanceof Error ? error.message : error);
+    res.status(500).json({ error: 'Could not get throw' });
+  }
+});
+
+// POST /api/games/:id/end - Spiel beenden
+app.post('/api/games/:id/end', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const gameId = parseInt(req.params.id);
+    const { winnerId, winningThrowId } = req.body;
+    
+    console.log('Ending game with winner:', { gameId, winnerId, winningThrowId });
+
+    if (!winnerId || isNaN(winnerId)) {
+      throw new Error('Invalid winner ID');
+    }
+
+    // Start a transaction to ensure all updates happen together
+    const game = await prisma.$transaction(async (prisma) => {
+      // 1. Get the winning throw details to create winning double record
+      if (winningThrowId) {
+        const winningThrow = await prisma.throw.findUnique({
+          where: { id: winningThrowId }
+        });
+
+        if (winningThrow && winningThrow.multiplier === 2) {
+          // Create winning double record only for double-out throws
+          await prisma.winningDouble.create({
+            data: {
+              playerId: winnerId,
+              gameId: gameId,
+              value: winningThrow.targetNumber || 0 // Use actual target number or 0 as fallback
+            }
+          });
+        }
+
+        // Update the throw to mark it as winning throw
+        await prisma.throw.update({
+          where: { id: winningThrowId },
+          data: {
+            isWinningThrow: true,
+            busted: false
+          }
+        });
+      }
+
+      // 2. Update the game status and winner
+      const updatedGame = await prisma.game.update({
+        where: { id: gameId },
+        data: {
+          endTime: new Date(),
+          isFinished: true,
+          status: 'finished',
+          winnerId: winnerId
+        },
+        include: {
+          winner: true,
+          players: {
+            include: {
+              player: true
+            }
+          }
+        }
+      });
+
+      return updatedGame;
+    });
+
+    res.json(game);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Error ending game:', message);
+    res.status(500).json({ error: 'Could not end game', details: message });
+  }
+});
+
+// PUT /api/games/:id/winner - Set the winner of a game
+app.put('/api/games/:id/winner', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const gameId = parseInt(req.params.id);
+    const { winnerId } = req.body;
+    
+    // Update the game with the winner ID
+    const game = await prisma.game.update({
+      where: { id: gameId },
+      data: {
+        winnerId
+      }
+    });
+    
+    console.log(`[setGameWinner] Set winner ${winnerId} for game ${gameId}`);
+    res.json(game);
+  } catch (error) {
+    console.error('Error setting game winner:', error instanceof Error ? error.message : error);
+    res.status(500).json({ error: 'Could not set game winner' });
+  }
+});
 
 // PUT /api/players/:id/statistics - Update player statistics
 app.put('/api/players/:id/statistics', async (req: Request, res: Response): Promise<void> => {
@@ -458,7 +635,7 @@ app.put('/api/players/:id/statistics', async (req: Request, res: Response): Prom
     
     res.json(updatedPlayer);
   } catch (error) {
-    console.error('Error updating player statistics:', error);
+    console.error('Error updating player statistics:', error instanceof Error ? error.message : error);
     res.status(500).json({ error: 'Could not update player statistics' });
   }
 });
@@ -475,7 +652,7 @@ app.get('/api/games/:id', (async (req: Request, res: Response): Promise<void> =>
     }
     res.json(game);
   } catch (error) {
-    console.error('Error getting game:', error);
+    console.error('Error getting game:', error instanceof Error ? error.message : error);
     res.status(500).json({ error: 'Failed to get game' });
   }
 }) as RequestHandler);
@@ -489,7 +666,7 @@ app.get('/api/games/:gameId/last-throw', async (req: Request, res: Response): Pr
     });
     res.json({ throwId: lastThrow?.id || null });
   } catch (error) {
-    console.error('Error getting last throw:', error);
+    console.error('Error getting last throw:', error instanceof Error ? error.message : error);
     res.status(500).json({ error: 'Failed to get last throw' });
   }
 });
@@ -578,7 +755,7 @@ app.get('/api/games/:gameId/player-stats/:playerId', async (req: Request, res: R
       totalPoints
     });
   } catch (error) {
-    console.error('Error fetching player stats:', error);
+    console.error('Error fetching player stats:', error instanceof Error ? error.message : error);
     res.status(500).json({
       error: 'Could not fetch player stats',
       average: 0,
@@ -669,7 +846,7 @@ app.get('/api/games/:gameId/player-throws/:playerId', async (req: Request, res: 
     // FALLBACK LOGIC: If there are no throws in the requested round,
     // find the player's most recent round with throws UNLESS fallback is disabled
     let effectiveRound = targetRound;
-    let roundThrows;
+    let roundThrows: SelectedThrowData[] = [];
     let usedFallback = false;
     
     if (throwCount === 0 && allPlayerThrows.length > 0 && !disableFallback) {
@@ -756,17 +933,17 @@ app.get('/api/games/:gameId/player-throws/:playerId', async (req: Request, res: 
       formattedThrows.fill(null);
       
       // Then add the throws in the correct positions based on dartNumber
-      for (const throw_ of roundThrows) {
+      for (const t of roundThrows) {
         // Make sure we only process valid dart numbers (1, 2, or 3)
-        if (throw_.dartNumber >= 1 && throw_.dartNumber <= 3) {
+        if (t.dartNumber >= 1 && t.dartNumber <= 3) {
           // Position in array is dartNumber - 1 (so dart 1 goes in position 0)
-          const arrayPosition = throw_.dartNumber - 1;
+          const arrayPosition = t.dartNumber - 1;
           
           // If busted, store score as negative value but keep the multiplier
-          if (throw_.busted) {
-            formattedThrows[arrayPosition] = { score: throw_.score * -1, multiplier: throw_.multiplier };
+          if (t.busted) {
+            formattedThrows[arrayPosition] = { score: t.score * -1, multiplier: t.multiplier };
           } else {
-            formattedThrows[arrayPosition] = { score: throw_.score, multiplier: throw_.multiplier };
+            formattedThrows[arrayPosition] = { score: t.score, multiplier: t.multiplier };
           }
         }
       }
@@ -823,7 +1000,7 @@ app.get('/api/games/:gameId/player-throws/:playerId', async (req: Request, res: 
       }
     });
   } catch (error) {
-    console.error('Error getting player throws:', error);
+    console.error('Error getting player throws:', error instanceof Error ? error.message : error);
     res.status(500).json({ 
       error: 'Could not get player throws',
       lastThrows: [null, null, null],
@@ -856,7 +1033,7 @@ app.post('/api/games/:gameId/mark-round-busted', async (req: Request, res: Respo
       throws.map(t => ({ id: t.id, dart: t.dartNumber, score: t.score, busted: t.busted })));
 
     // Mark all throws as busted
-    const updates: typeof throws = [];
+    const updates: pkg.Throw[] = [];
     for (const throwData of throws) {
       console.log(`[mark-round-busted] Marking throw ID ${throwData.id} (dart ${throwData.dartNumber}, score ${throwData.score}) as busted`);
       
@@ -890,7 +1067,7 @@ app.post('/api/games/:gameId/mark-round-busted', async (req: Request, res: Respo
       updatesApplied: updates.length
     });
   } catch (error) {
-    console.error('Error marking throws as busted:', error);
+    console.error('Error marking throws as busted:', error instanceof Error ? error.message : error);
     res.status(500).json({ error: 'Could not mark throws as busted' });
   }
 });
@@ -942,7 +1119,7 @@ app.post('/api/games/:gameId/unmark-round-busted', async (req: Request, res: Res
     }
 
     // Mark all throws as NOT busted using Prisma's update
-    const updates: typeof throws = [];
+    const updates: pkg.Throw[] = [];
     for (const throwData of throws) {
       console.log(`[unmark-round-busted] Restoring throw ID ${throwData.id} (dart ${throwData.dartNumber}, score ${throwData.score}, was busted: ${throwData.busted})`);
       
@@ -992,7 +1169,7 @@ app.post('/api/games/:gameId/unmark-round-busted', async (req: Request, res: Res
       }
     });
   } catch (error) {
-    console.error('Error restoring throws from busted state:', error);
+    console.error('Error restoring throws from busted state:', error instanceof Error ? error.message : error);
     res.status(500).json({ error: 'Could not restore throws from busted state' });
   }
 });

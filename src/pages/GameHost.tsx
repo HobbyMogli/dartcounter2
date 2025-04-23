@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useLocation, Navigate, useNavigate } from 'react-router-dom';
-import type { GameSetupData } from '../types/gameTypes';
+import { useLocation, Navigate } from 'react-router-dom';
+import type { GameSetupData, X01Settings } from '../types/gameTypes';
 import PlayerScoreCard from '../components/game/PlayerScoreCard';
 import { SettingsModal } from '../components/game-settings/SettingsModal';
 import { playerService } from '../services/db';
@@ -9,6 +9,7 @@ import { Player } from '../services/db/types';
 import { useSettings } from '../contexts/SettingsContext';
 import { X01Game } from '../components/game/X01Game';
 import { toast } from 'react-hot-toast';
+import { GameOverModal } from '../components/game/GameOverModal';
 
 // API URL for direct fetch calls
 const API_URL = 'http://localhost:3001/api';
@@ -26,75 +27,79 @@ interface GameStatistics {
   totalPoints: number;
 }
 
-interface PlayerGameState extends Player {
+// Export this interface so it can be used by game components
+export interface PlayerGameState extends Player {
   currentScore: number;
   lastThrows: (ThrowDisplayData | null)[];
   gameStats: GameStatistics;
   currentDart: number; // Track dart number per player
 }
 
-interface ThrowHistory {
-  value: number;
-  playerIndex: number;
+// Define game action log entry structure
+interface GameLogEntry {
+  type: 'throw' | 'undo';
+  timestamp: number;
+  playerId?: number;
+  playerName?: string;
+  value?: number;
+  undoneThrow?: {
+    playerId: number;
+    playerName: string;
+    value: number;
+  };
+  isBusted?: boolean;
 }
 
-const Game: React.FC = () => {
+const GameHost: React.FC = () => {
   const location = useLocation();
-  const navigate = useNavigate();
   const gameData = location.state as GameSetupData;
   const [players, setPlayers] = useState<PlayerGameState[]>([]);
   const [activePlayerIndex, setActivePlayerIndex] = useState(0);
-  const [currentThrow, setCurrentThrow] = useState<number[]>([]);
-  const [throwHistory, setThrowHistory] = useState<ThrowHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [gameId, setGameId] = useState<number | null>(null);
   const settings = useSettings();
   
-  // Neue Zustandsvariablen für Runden-Management - dart is now per player
   const [currentRound, setCurrentRound] = useState(1);
-  
-  // Add a state for debug panel visibility - controlled by settings now
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [isGameOver, setIsGameOver] = useState(false);
   const [winner, setWinner] = useState<PlayerGameState | null>(null);
-  const [gameSaved, setGameSaved] = useState(false);
+  const [gameLog, setGameLog] = useState<GameLogEntry[]>([]);
+  const [winningThrowId, setWinningThrowId] = useState<number | null>(null);
 
-  // Ref hinzufügen, um doppelte Initialisierung zu verhindern
+  // Ref to prevent double initialization
   const initialized = useRef(false);
-
-  // Add a new state for tracking game actions (throws and undos)
-  const [gameLog, setGameLog] = useState<Array<{
-    type: 'throw' | 'undo';
-    timestamp: number;
-    playerId?: number;
-    playerName?: string;
-    value?: number;
-    undoneThrow?: {
-      playerId: number;
-      playerName: string;
-      value: number;
-    };
-    isBusted?: boolean;
-  }>>([]);
 
   // Update showDebugPanel when settings change
   useEffect(() => {
     setShowDebugPanel(settings.showDebugInfo);
   }, [settings.showDebugInfo]);
 
+  // Capture initialization errors
+  const [initError, setInitError] = useState<string | null>(null);
+
   useEffect(() => {
-    // Prüfe, ob die Initialisierung bereits erfolgte
+    // Check if initialization has already occurred
     if (initialized.current) {
       return;
     }
-    initialized.current = true; // Setze Flag, dass Initialisierung gestartet wurde
+    initialized.current = true; // Set flag that initialization has started
 
     const initializeGame = async () => {
       if (gameData?.players) {
         try {
+          console.log("[GameHost] Starting game initialization with players:", gameData.players);
+          
           // Load players
           const allPlayers = await playerService.getAllPlayers();
+          console.log("[GameHost] Fetched all players:", allPlayers);
+          
+          if (!allPlayers || allPlayers.length === 0) {
+            setInitError("Failed to fetch players. Please check the server connection.");
+            setIsLoading(false);
+            return;
+          }
+          
           const gamePlayers = allPlayers
             .filter(player => gameData.players.includes(player.id.toString()))
             .map(player => ({
@@ -109,32 +114,50 @@ const Game: React.FC = () => {
                 totalPoints: 0
               }
             }));
-          setPlayers(gamePlayers);
+            
+          console.log("[GameHost] Filtered game players:", gamePlayers);
+          
+          if (gamePlayers.length === 0) {
+            setInitError("No matching players found. Please check player selection.");
+            setIsLoading(false);
+            return;
+          }
 
           // Create a single game for the entire match
-          console.log("[Game] Attempting to create game..."); // Log vor Erstellung
+          console.log("[GameHost] Attempting to create game..."); // Log before creation
           const game = await gameService.createGame({
             playerIds: gamePlayers.map(player => parseInt(player.id.toString())),
             gameType: gameData.gameMode,
             startingScore: gameData.settings.startScore || 501,
             settings: gameData.settings
           });
+          
+          if (!game || !game.id) {
+            setInitError("Failed to create game. Please try again.");
+            setIsLoading(false);
+            return;
+          }
+          
           setGameId(game.id);
           
-          // Set the players state and finish loading
+          // Set the players state and finish loading - only do this once
           setPlayers(gamePlayers);
           setIsLoading(false);
           
           if (game.id) {
-            console.log(`[Game] Game successfully created with ID ${game.id}`);
+            console.log(`[GameHost] Game successfully created with ID ${game.id}`);
           }
         } catch (error) {
-          console.error('Fehler beim Initialisieren des Spiels:', error);
-        } finally {
+          console.error('Error initializing game:', error);
+          setInitError("Error initializing game: " + (error instanceof Error ? error.message : String(error)));
           setIsLoading(false);
         }
+      } else {
+        setInitError("No player data provided");
+        setIsLoading(false);
       }
     };
+    
     initializeGame();
   }, [gameData]);
   
@@ -142,7 +165,7 @@ const Game: React.FC = () => {
   useEffect(() => {
     const initializeGameState = async () => {
       if (gameId && players.length > 0 && !isLoading) {
-        console.log(`[Game] Initializing player stats and throws for game ${gameId}`);
+        console.log(`[GameHost] Initializing player stats and throws for game ${gameId}`);
         
         // Now that we have the game ID and all functions are defined, 
         // update stats and throws for all players
@@ -161,24 +184,49 @@ const Game: React.FC = () => {
     initializeGameState();
   }, [gameId, isLoading, players.length]);
 
-  // Redirect wenn keine Spieldaten vorhanden sind
+  // Redirect if no game data is available
   if (!gameData) {
     return <Navigate to="/" replace />;
   }
 
-  if (isLoading || !gameId) {
-    return <div className="text-white text-center py-8">Lade Spielerdaten...</div>;
+  if (isLoading) {
+    return <div className="text-white text-center py-8">Loading player data...</div>;
   }
 
-  // Dart-Nummern Hilfsfunktionen - now gets the current player's dart number
+  if (initError) {
+    return (
+      <div className="text-white text-center py-8">
+        <div className="text-red-500 font-bold mb-4">Error: {initError}</div>
+        <button 
+          onClick={() => window.history.back()}
+          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+        >
+          Go Back
+        </button>
+      </div>
+    );
+  }
+
+  if (!gameId) {
+    return (
+      <div className="text-white text-center py-8">
+        <div className="text-red-500 font-bold mb-4">Failed to create game</div>
+        <button 
+          onClick={() => window.history.back()}
+          className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+        >
+          Go Back
+        </button>
+      </div>
+    );
+  }
+
+  // Helper functions for dart/round numbers
   const getCurrentDartNumber = () => {
     return players[activePlayerIndex]?.currentDart || 1;
   };
   
-  // Runden-Nummern Hilfsfunktionen
-  const getCurrentRoundNumber = () => currentRound;
-  
-  // Updated to work with player-specific dart numbers
+  // Update round and dart numbers, returns true if player should be switched
   const updateRoundAndDart = (playerIndex: number, dartNumber: number): boolean => {
     if (dartNumber === 3) {
       // When the third dart is thrown:
@@ -215,13 +263,13 @@ const Game: React.FC = () => {
     }
   };
 
-  // Funktion zum Aktualisieren der Spielerstatistiken
+  // Updating player statistics
   const updatePlayerStats = async (playerIndex: number) => {
     if (!gameId) return;
     
     try {
       const player = players[playerIndex];
-      // Direkt typisieren, statt StatsData zu verwenden
+      // Direct typing instead of using StatsData
       const stats: {
         dartsThrown: number;
         average: number;
@@ -289,7 +337,7 @@ const Game: React.FC = () => {
     }
   };
 
-  // Funktion zum Aktualisieren der Anzeige der letzten Würfe
+  // Update player throws for display
   const updatePlayerThrows = async (playerIndex: number, forceReset: boolean = false, targetRound: number = currentRound) => {
     if (!gameId) {
       console.error('No game ID available');
@@ -369,7 +417,7 @@ const Game: React.FC = () => {
     }
   };
 
-  // Updated handlePlayerSwitch to maintain player-specific dart numbers
+  // Handle player switching
   const handlePlayerSwitch = async (nextPlayerIndex: number, newRound: number) => {
     // Log the transition for debugging
     console.log(`[handlePlayerSwitch] From player ${activePlayerIndex} to ${nextPlayerIndex}, round: ${currentRound} to ${newRound}`);
@@ -378,7 +426,8 @@ const Game: React.FC = () => {
     const isMovingForward = newRound > currentRound;
     
     // Set the active player before updating display (to ensure correct player is targeted)
-        setActivePlayerIndex(nextPlayerIndex);
+    setActivePlayerIndex(nextPlayerIndex);
+    setCurrentRound(newRound);
     
     try {
       // Update displays for ALL players, not just the active one
@@ -424,6 +473,7 @@ const Game: React.FC = () => {
     }
   };
 
+  // Add an entry to the game action log
   const addLogEntry = (
     throwInfo: {
       playerId: number;
@@ -443,12 +493,21 @@ const Game: React.FC = () => {
     }]);
   };
 
-  // Function to handle busts consistently, to avoid code duplication
-  const handleBust = async (currentPlayer: PlayerGameState, throwValue: number, multiplier: number, dartNumber: number, roundNumber: number, targetNumber?: number, isBull?: boolean) => {
+  // Generic function to handle a bust from any game mode
+  const handleBustGeneric = async (
+    playerId: number, 
+    playerName: string, 
+    throwValue: number, 
+    multiplier: number, 
+    dartNumber: number, 
+    roundNumber: number, 
+    targetNumber?: number, 
+    isBull?: boolean
+  ) => {
     // Add to game log
     addLogEntry({
-      playerId: parseInt(currentPlayer.id.toString()),
-      playerName: currentPlayer.name,
+      playerId: playerId,
+      playerName: playerName,
       value: throwValue,
       dartNumber: dartNumber,
       isBusted: true
@@ -457,7 +516,7 @@ const Game: React.FC = () => {
     // Register the busted throw in the database
     await gameService.registerThrow({
       gameId: gameId!,
-      playerId: parseInt(currentPlayer.id.toString()),
+      playerId: playerId,
       score: throwValue,
       roundNumber,
       dartNumber,
@@ -467,15 +526,12 @@ const Game: React.FC = () => {
     });
     
     // Mark the round as busted in the backend
-    await gameService.markRoundAsBusted(gameId!, parseInt(currentPlayer.id.toString()), roundNumber);
+    await gameService.markRoundAsBusted(gameId!, playerId, roundNumber);
     
     // Switch to next player (bust)
     const nextPlayerIndex = (activePlayerIndex + 1) % players.length;
     // Only advance the round if we were on the last dart
     const nextRound = roundNumber + (dartNumber === 3 ? 1 : 0);
-
-      // Reset current throw
-      setCurrentThrow([]);
 
     // Make sure the player's score is properly updated based on database
     await updatePlayerStats(activePlayerIndex);
@@ -505,196 +561,45 @@ const Game: React.FC = () => {
     }
   };
 
-  // In handleThrow function, replace the bust logic with calls to handleBust
-  const handleThrow = async (score: number, multiplier: number, targetNumber?: number, isBull?: boolean) => {
-    if (!gameId) {
-      console.error('No game ID available');
-      return;
-    }
-
+  // Generic game end handler that can be called by any game mode when a win condition is met
+  const handleGameEnd = async (winnerIndex: number) => {
+    if (!gameId || winnerIndex < 0 || winnerIndex >= players.length) return;
+    
     try {
-      const throwValue = score * multiplier;
-      
-      // Get current dart and round numbers from the current player
-      const dartNumber = getCurrentDartNumber();
-      const roundNumber = getCurrentRoundNumber();
-      
-      // Aktueller Spieler vor möglichem Wechsel
-      let currentPlayer = players[activePlayerIndex];
-
-      if (!currentPlayer) {
-        console.error('No active player found');
-        return;
-      }
-
-      // Calculate the new score after this throw
-      const newScore = currentPlayer.currentScore - throwValue;
-
-      // Get checkout rule
-      const checkoutRule = gameData.settings.checkOut || 'straight';
-      
-      // Special cases for impossible checkouts when current score is already too low
-      // Case 1: Double-Out and remaining score less than 2 (impossible to checkout)
-      if (currentPlayer.currentScore < 2 && checkoutRule === 'double') {
-        console.log(`Impossible checkout: Player ${currentPlayer.name} has score less than 2 with double-out rule.`);
-        toast.error(`Bust! Score less than 2 cannot be checked out with a double.`);
-        
-        await handleBust(currentPlayer, throwValue, multiplier, dartNumber, roundNumber, targetNumber, isBull);
-        return;
-      }
-      
-      // Case 2: Triple-Out and remaining score less than 3 (impossible to checkout)
-      if (currentPlayer.currentScore < 3 && checkoutRule === 'triple') {
-        console.log(`Impossible checkout: Player ${currentPlayer.name} has score less than 3 with triple-out rule.`);
-        toast.error(`Bust! Score less than 3 cannot be checked out with a triple.`);
-        
-        await handleBust(currentPlayer, throwValue, multiplier, dartNumber, roundNumber, targetNumber, isBull);
-        return;
-      }
-      
-      // Check if the throw would leave the player with an impossible checkout
-      // Case 1: Double-Out and new score would be less than 2 but not 0 (impossible to checkout)
-      if (newScore > 0 && newScore < 2 && checkoutRule === 'double') {
-        console.log(`Throw would cause impossible checkout: Player ${currentPlayer.name} would have score ${newScore} with double-out rule.`);
-        toast.error(`Bust! Score of ${newScore} cannot be checked out with a double.`);
-        
-        await handleBust(currentPlayer, throwValue, multiplier, dartNumber, roundNumber, targetNumber, isBull);
-        return;
-      }
-      
-      // Case 2: Triple-Out and new score would be less than 3 but not 0 (impossible to checkout)
-      if (newScore > 0 && newScore < 3 && checkoutRule === 'triple') {
-        console.log(`Throw would cause impossible checkout: Player ${currentPlayer.name} would have score ${newScore} with triple-out rule.`);
-        toast.error(`Bust! Score of ${newScore} cannot be checked out with a triple.`);
-        
-        await handleBust(currentPlayer, throwValue, multiplier, dartNumber, roundNumber, targetNumber, isBull);
-        return;
-      }
-      
-      // Check if this would be a checkout throw
-      if (newScore === 0) {
-        // Check if it's a valid checkout based on game settings
-        const checkoutRule = gameData.settings.checkOut || 'straight';
-        let isValidCheckout = true;
-        
-        // Validate checkout based on rules
-        if (checkoutRule === 'double' && multiplier !== 2) {
-          isValidCheckout = false;
-        } else if (checkoutRule === 'triple' && multiplier !== 3) {
-          isValidCheckout = false;
-        }
-        
-        // If it's an invalid checkout, bust the player
-        if (!isValidCheckout) {
-          console.log(`Invalid checkout: Player ${currentPlayer.name} busted!`);
-          toast.error(`Bust! ${checkoutRule} finish required for checkout.`);
-          
-          await handleBust(currentPlayer, throwValue, multiplier, dartNumber, roundNumber, targetNumber, isBull);
-          return;
-        }
-      } else if (newScore < 0) {
-        // Handle bust for scores that would go below 0
-        console.log(`Bust! Player ${currentPlayer.name}'s score would go below 0.`);
-        toast.error("Bust! Score would go below zero.");
-        
-        await handleBust(currentPlayer, throwValue, multiplier, dartNumber, roundNumber, targetNumber, isBull);
-        return;
-      }
-
-      // Add to game log
-      addLogEntry({
-        playerId: parseInt(currentPlayer.id.toString()),
-        playerName: currentPlayer.name,
-        value: throwValue,
-        dartNumber: dartNumber
-      });
-
-      // Create a new lastThrows array with the current throw at the correct position
-      // and null values for the remaining positions
-      let newLastThrows = [...currentPlayer.lastThrows];
-      newLastThrows[dartNumber - 1] = { score: throwValue, multiplier: multiplier };
-      
-      // Update player's score and lastThrows
-      const updatedPlayers = [...players];
-      updatedPlayers[activePlayerIndex] = {
-        ...currentPlayer,
-        currentScore: newScore,
-        lastThrows: newLastThrows
-      };
-      setPlayers(updatedPlayers);
-
-      // Add to throw history
-      setThrowHistory([
-        ...throwHistory,
-        { value: throwValue, playerIndex: activePlayerIndex }
-      ]);
-      
-      // Register throw in backend
-      await gameService.registerThrow({
-        gameId,
-        playerId: parseInt(currentPlayer.id.toString()),
-        score: throwValue,
-        roundNumber,
-        dartNumber,
-        multiplier,
-        isBull: isBull || false,
-        targetNumber: targetNumber || score
-      });
-      
-      // Update player statistics for all players to ensure consistent display
+      // Make sure the player statistics are up to date
       for (let i = 0; i < players.length; i++) {
         await updatePlayerStats(i);
       }
-
-      // Check if player has won the game with this throw
-      if (newScore === 0) {
-        // Player has won! End the game
-        await handleGameEnd(newScore);
-        
-        // Show winner message
-        toast.success(`Game Over! ${currentPlayer.name} wins!`);
-        
-        // Here we could show a Game Over modal or navigate to a results page
-        return;
-      }
-
-      // Update round and dart numbers, and check if we should switch player
-      const shouldSwitchPlayer = updateRoundAndDart(activePlayerIndex, dartNumber);
-
-      // If the third dart is thrown, switch to the next player
-      if (shouldSwitchPlayer) {
-        const nextPlayerIndex = (activePlayerIndex + 1) % players.length;
-        const nextRound = currentRound + 1; // When switching after 3 darts, we move to next round
-        
-        // Reset current throw
-        setCurrentThrow([]);
-        
-        // Ensure next player starts with dart 1 (this is redundant since updateRoundAndDart already does this,
-        // but kept for clarity and robustness)
-        setPlayers(currentPlayers => {
-          const updatedPlayers = [...currentPlayers];
-          updatedPlayers[nextPlayerIndex] = {
-            ...updatedPlayers[nextPlayerIndex],
-            currentDart: 1
-          };
-          return updatedPlayers;
-        });
-        
-        // Use the handlePlayerSwitch function to manage the transition
-        await handlePlayerSwitch(nextPlayerIndex, nextRound);
-      } else {
-        // If we don't switch players, make sure the current player's display is updated
-        // This ensures the throw appears on the UI immediately
-        // Disable fallback to always show the current round's throws
-        await updatePlayerThrowsDisplay(activePlayerIndex, roundNumber, true);
-      }
-
+      
+      // Get the most up-to-date player data for the winner
+      const currentWinner = players[winnerIndex];
+      const currentWinnerData = await gameService.getPlayerStats(
+        gameId, 
+        parseInt(currentWinner.id.toString())
+      );
+      
+      // Create updated winner object with latest stats
+      const updatedWinner = {
+        ...players[winnerIndex],
+        gameStats: {
+          dartsThrown: currentWinnerData.dartsThrown,
+          averagePerThrow: currentWinnerData.average,
+          highestThrow: currentWinnerData.highestScore,
+          totalPoints: currentWinnerData.totalPoints
+        }
+      };
+      
+      // Set the winner and game over state after stats are updated
+      setWinner(updatedWinner);
+      setIsGameOver(true);
+      
+      console.log('Game ended with winner:', updatedWinner.name);
     } catch (error) {
-      console.error('Error handling throw:', error);
+      console.error('Error ending game:', error);
     }
   };
 
-  // Modified handleUndo function to fix dart positioning after undo operations
+  // Generic undo function that works across all game modes
   const handleUndo = async () => {
     if (!gameId) {
       console.error('No game ID available');
@@ -715,7 +620,7 @@ const Game: React.FC = () => {
       const lastThrowId = await gameService.getLastThrowId(gameId);
       
       if (!lastThrowId) {
-        toast.error('Konnte letzten Wurf nicht finden.');
+        toast.error('Could not find last throw.');
         return;
       }
 
@@ -727,7 +632,7 @@ const Game: React.FC = () => {
         console.log(`[handleUndo] Last throw details:`, throwData);
       } catch (error) {
         console.error('[handleUndo] Error getting throw details:', error);
-        toast.error('Fehler beim Abrufen der Wurfdaten.');
+        toast.error('Error retrieving throw data.');
         return;
       }
       
@@ -804,9 +709,6 @@ const Game: React.FC = () => {
         setCurrentRound(targetRound);
       }
       
-      // Reset current throw
-      setCurrentThrow([]);
-      
       // Update all players' stats and throws to ensure consistent state
       for (let i = 0; i < players.length; i++) {
         await updatePlayerStats(i);
@@ -820,74 +722,67 @@ const Game: React.FC = () => {
       }
       
       console.log(`[handleUndo] Undo complete. Active player: ${activePlayerIndex}, Round: ${targetRound}, Next dart: ${nextDartNumber}`);
-      toast.success('Zug rückgängig gemacht.');
+      toast.success('Move undone.');
     } catch (error) {
       console.error('Error during undo:', error);
-      toast.error('Fehler beim Rückgängigmachen');
+      toast.error('Error undoing move');
     }
   };
 
-  const handleGameEnd = async (score: number) => {
-    if (!gameId) return;
-    
+  // Callback handler for a generic throw from any game mode
+  const handleThrowGeneric = async (
+    playerId: number, 
+    throwValue: number, 
+    multiplier: number, 
+    dartNumber: number, 
+    roundNumber: number, 
+    targetNumber?: number, 
+    isBull?: boolean,
+    isBusted?: boolean,
+    isWinningThrow?: boolean
+  ): Promise<boolean> => {
+    if (!gameId) {
+      console.error('No game ID available for throw');
+      return false; // Ensure we always return a boolean
+    }
+
     try {
-      // Make sure the player statistics are up to date
+      // Register throw in backend
+      await gameService.registerThrow({
+        gameId,
+        playerId,
+        score: throwValue,
+        roundNumber,
+        dartNumber,
+        multiplier,
+        isBull: isBull || false,
+        targetNumber: targetNumber || (multiplier ? throwValue / multiplier : 0)
+      });
+
+      // If it's a winning throw, get the throw ID for the modal
+      if (isWinningThrow) {
+        const lastThrowId = await gameService.getLastThrowId(gameId);
+        if (lastThrowId) {
+          setWinningThrowId(lastThrowId);
+        }
+      }
+
+      // Update stats for all players
       for (let i = 0; i < players.length; i++) {
         await updatePlayerStats(i);
       }
-      
-      // Get the most up-to-date player data for the winner
-      const currentWinnerIndex = activePlayerIndex;
-      const currentWinner = players[currentWinnerIndex];
-      const currentWinnerData = await gameService.getPlayerStats(
-        gameId, 
-        parseInt(currentWinner.id.toString())
-      );
-      
-      // Create updated winner object with latest stats
-      const updatedWinner = {
-        ...players[currentWinnerIndex],
-        gameStats: {
-          dartsThrown: currentWinnerData.dartsThrown,
-          averagePerThrow: currentWinnerData.average,
-          highestThrow: currentWinnerData.highestScore,
-          totalPoints: currentWinnerData.totalPoints
-        }
-      };
-      
-      // Set the winner and game over state after stats are updated
-      setWinner(updatedWinner);
-      setIsGameOver(true);
-      
-      // Don't automatically save the game, let the user do it explicitly
-    console.log('Game ended with score:', score);
+
+      // Update throws display after registering the throw
+      await updatePlayerThrows(activePlayerIndex, false, roundNumber);
+
+      return true; // Indicate success
     } catch (error) {
-      console.error('Error ending game:', error);
+      console.error('Error registering throw:', error);
+      return false;
     }
   };
 
-  // New function to explicitly save the game
-  const saveGameToDatabase = async () => {
-    if (!gameId || !winner) return;
-    
-    try {
-      // Set the winner ID and end the game in the database
-      const winnerId = parseInt(winner.id.toString());
-      await gameService.setGameWinner(gameId, winnerId);
-      await gameService.endGame(gameId, winner.currentScore);
-      
-      // Mark the game as saved
-      setGameSaved(true);
-      toast.success('Game saved successfully!');
-      
-      console.log('Game saved to database');
-    } catch (error) {
-      console.error('Error saving game:', error);
-      toast.error('Failed to save game');
-    }
-  };
-
-  // Helper function to format timestamp
+  // Format timestamp for the debug panel
   const formatTime = (timestamp: number): string => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString('de-DE', { 
@@ -898,9 +793,34 @@ const Game: React.FC = () => {
     });
   };
 
+  // Determine what game component to render based on game mode
+  const renderGameComponent = () => {
+    const commonProps = {
+      gameId: gameId!,
+      settings: gameData.settings,
+      players,
+      activePlayerIndex,
+      currentRound,
+      onUndo: handleUndo,
+      onBust: handleBustGeneric,
+      onRegisterThrow: handleThrowGeneric,
+      onPlayerSwitch: handlePlayerSwitch,
+      onGameOver: handleGameEnd,
+      updateRoundAndDart
+    };
+
+    switch (gameData.gameMode) {
+      case 'x01':
+        return <X01Game {...commonProps} settings={gameData.settings as X01Settings} />;
+      // Add cases for other game modes as they are implemented
+      default:
+        return <div className="text-white text-center py-4">Game mode {gameData.gameMode} not yet implemented.</div>;
+    }
+  };
+
   return (
     <div className="space-y-8">
-      {/* Debug Information Panel - Controlled by settings now */}
+      {/* Debug Information Panel - Controlled by settings */}
       {showDebugPanel && (
         <div className="bg-gray-800 p-3 rounded text-white text-sm">
           <div className="grid grid-cols-2 gap-2 mb-2">
@@ -908,8 +828,7 @@ const Game: React.FC = () => {
             <div>Active Player: {players[activePlayerIndex]?.name || 'None'}</div>
             <div>Current Dart: {getCurrentDartNumber()}</div>
             <div>Current Round: {currentRound}</div>
-            <div>Throw History Length: {throwHistory.length}</div>
-            <div>Last Score: {throwHistory.length > 0 ? throwHistory[throwHistory.length - 1].value : 'None'}</div>
+            <div>Game Mode: {gameData.gameMode}</div>
           </div>
 
           {gameLog.length > 0 && (
@@ -935,9 +854,9 @@ const Game: React.FC = () => {
         </div>
       )}
 
-      {/* Grid for Player Score Cards - simplified layout */}
-      <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-${players.length > 2 ? '3' : players.length} lg:grid-cols-${players.length > 4 ? '4' : players.length} gap-4 justify-items-center`}>
-        {/* Player Score Cards Map */}
+      {/* Grid for Player Score Cards - changed to flexbox */}
+      <div className="flex flex-wrap justify-center items-start gap-x-2.5 gap-y-4">
+        {/* Player Score Cards Map with 'vs.' separator */}
         {players.map((player, index) => {
           // Determine if and which dart index to highlight for this player
           const shouldHighlight = index === activePlayerIndex && settings.highlightCurrentDart;
@@ -945,98 +864,53 @@ const Game: React.FC = () => {
           const highlightIndex = shouldHighlight ? (player.currentDart - 1) : -1; // Use -1 if no highlight
 
           return (
-          <PlayerScoreCard
-            key={player.id}
-            playerName={player.name}
-            currentScore={player.currentScore}
-            lastThrows={player.lastThrows}
-            isActive={index === activePlayerIndex}
-            statistics={{
-              average: player.gameStats.averagePerThrow,
-              dartsThrown: player.gameStats.dartsThrown,
-              highestScore: player.gameStats.highestThrow
-            }}
-              showStats={settings.showStatistics}
-              showScoreSum={settings.showLastThrowSum}
-              highlightDartIndex={highlightIndex} // Pass the calculated index
-          />
+            <React.Fragment key={player.id}>
+              <PlayerScoreCard
+                playerName={player.name}
+                currentScore={player.currentScore}
+                lastThrows={player.lastThrows}
+                isActive={index === activePlayerIndex}
+                statistics={{
+                  average: player.gameStats.averagePerThrow,
+                  dartsThrown: player.gameStats.dartsThrown,
+                  highestScore: player.gameStats.highestThrow
+                }}
+                showStats={settings.showStatistics}
+                showScoreSum={settings.showLastThrowSum}
+                highlightDartIndex={highlightIndex} // Pass the calculated index
+              />
+              {/* Add 'vs.' between cards */}
+              {index < players.length - 1 && (
+                <div className="text-2xl font-bold text-gray-400 self-center mx-2.5">
+                  vs.
+                </div>
+              )}
+            </React.Fragment>
           );
         })}
       </div>
       
-      {currentThrow.length > 0 && (
-        <div className="bg-gray-800 p-2 rounded text-white text-sm">
-          Debug: Current throw sequence: {currentThrow.join(', ')}
-        </div>
-      )}
-      
-      <X01Game
-        onThrow={handleThrow}
-        onUndo={handleUndo}
-      />
+      {/* Render the game-specific component */}
+      <div className="max-w-lg mx-auto">
+        {renderGameComponent()}
+      </div>
+
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
       />
       
-      {/* Game Over Modal */}
-      {isGameOver && winner && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-gray-800 p-6 rounded-lg max-w-md w-full text-center">
-            <h2 className="text-2xl text-white font-bold mb-4">Game Over!</h2>
-            <p className="text-xl text-white mb-4">{winner.name} wins!</p>
-            <div className="text-white mb-6 space-y-2">
-              <div className="flex justify-between px-4">
-                <span>Würfe:</span>
-                <span>{winner.gameStats.dartsThrown}</span>
-              </div>
-              <div className="flex justify-between px-4">
-                <span>Ø pro Wurf:</span>
-                <span>{winner.gameStats.averagePerThrow.toFixed(1)}</span>
-              </div>
-              <div className="flex justify-between px-4">
-                <span>Höchster Wurf:</span>
-                <span>{winner.gameStats.highestThrow}</span>
-              </div>
-            </div>
-            
-            {!gameSaved ? (
-              <div className="mb-4">
-                <button 
-                  onClick={saveGameToDatabase}
-                  className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 w-full mb-4"
-                >
-                  Spiel speichern
-                </button>
-                <p className="text-yellow-400 text-sm">Speichere das Spiel, um die Spielerstatistiken zu aktualisieren.</p>
-              </div>
-            ) : (
-              <div className="mb-4">
-                <p className="text-green-400 mb-4">
-                  ✓ Spiel gespeichert
-                </p>
-              </div>
-            )}
-            
-            <div className="flex justify-center space-x-4">
-              <button 
-                onClick={() => window.location.reload()}
-                className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-              >
-                Play Again
-              </button>
-              <button 
-                onClick={() => navigate('/')}
-                className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
-              >
-                Back to Menu
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* Game over modal */}
+      {isGameOver && winner && gameId && winningThrowId && (
+        <GameOverModal
+          isOpen={isGameOver}
+          gameId={gameId}
+          winner={winner}
+          winningThrowId={winningThrowId}
+        />
       )}
     </div>
   );
 };
 
-export default Game;
+export default GameHost;

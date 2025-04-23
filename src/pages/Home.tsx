@@ -155,23 +155,27 @@ const Home: React.FC = () => {
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
       {/* Browser-ähnliche Tab-Navigation mit Blur-Effekt */}
-      <div className="relative w-fit mx-auto">
-        {/* Tab-Leiste mit "Browser-Tabs" und Blur-Effekt */}
-        <div className={`grid w-full grid-cols-${GAME_MODES.length}`}>
+      {/* Remove w-fit to allow flex container to expand */}
+      <div className="relative mx-auto">
+        {/* Change from grid to flex for horizontal layout */}
+        <div className="flex w-full">
           {GAME_MODES.map((mode) => (
             <div
               key={mode.id}
+              // Add flex-1 to make tabs share width equally, adjust padding/margins as needed
               className={`
                 relative
+                flex-1 // Make tabs share width
                 px-4
                 py-3
                 cursor-pointer
                 select-none
                 backdrop-blur-md
-                border-x-2
+                border-x
+                border-gray-500 // Default border
                 ${selectedGameMode === mode.id
-                  ? 'z-10 bg-dark-800/70 text-neon-blue border-t-2 border-neon-blue border-b-0 rounded-t-lg'
-                  : 'z-0 bg-dark-900/50 text-gray-400 border-b-2 border-gray-500 border-transparent rounded-t-lg hover:bg-dark-800/60 hover:text-gray-200'
+                  ? 'z-10 bg-dark-800/70 text-neon-blue border-t-2 border-neon-blue border-b-0 rounded-t-lg border-x-neon-blue' // Active state borders
+                  : 'z-0 bg-dark-900/50 text-gray-400 border-b-2 border-gray-500 hover:bg-dark-800/60 hover:text-gray-200' // Inactive state borders
                 }
                 transition-all duration-200
                 text-center
@@ -179,18 +183,13 @@ const Home: React.FC = () => {
               onClick={() => setSelectedGameMode(mode.id)}
             >
               <span className="relative z-10">{mode.title}</span>
-              {/* Geschwungene Ecken für Browser-Tab-Look */}
-              {selectedGameMode === mode.id && (
-                <>
-                  {/* Ensure no triangle divs remain here */}
-                </>
-              )}
+              {/* Removed triangle divs */}
             </div>
           ))}
         </div>
 
-        {/* Inhalt des aktiven Tabs mit Blur-Effekt - Add relative, border-t, -mt, remove rounded-b */}
-        <div className="relative bg-dark-800/70 backdrop-blur-md p-6 border-x-2 border-b-2 border-t-2 border-neon-blue -mt-0.5">
+        {/* Inhalt des aktiven Tabs - Adjust border to match flex layout */}
+        <div className="relative bg-dark-800/70 backdrop-blur-md p-6 border-x-2 border-b-2 border-neon-blue -mt-px"> {/* Use -mt-px to overlap border slightly */}
           {/* Removed redundant cover-up divs */}
           
           

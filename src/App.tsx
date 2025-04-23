@@ -3,7 +3,7 @@ import Layout from './components/layout/Layout';
 import Home from './pages/Home';
 import GameBoard from './pages/GameBoard';
 import Players from './pages/Players';
-import Game from './pages/Game';
+import GameHost from './pages/GameHost';
 import { SettingsProvider } from './contexts/SettingsContext';
 import { Toaster } from 'react-hot-toast';
 
@@ -15,7 +15,7 @@ function App() {
           <Toaster position="top-center" />
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/game" element={<Game />} />
+            <Route path="/game" element={<GameHost />} />
             <Route path="/gameboard" element={<GameBoard />} />
             <Route path="/players" element={<Players />} />
             {/* Fallback für nicht gefundene Routen */}

@@ -6,6 +6,7 @@ import { FiInfo, FiSettings, FiTrash2 } from 'react-icons/fi';
 import EditPlayerModal from '../components/players/EditPlayerModal';
 import DeletePlayerModal from '../components/players/DeletePlayerModal';
 import { Player } from '../services/db/types';
+import { toast } from 'react-hot-toast';
 
 const Players: React.FC = () => {
   const [players, setPlayers] = useState<Player[]>([]);
@@ -71,13 +72,14 @@ const Players: React.FC = () => {
 
   const handleDeletePlayer = async (playerId: number) => {
     try {
-      console.log('Versuche Spieler zu löschen:', playerId); // Debug-Log
       await playerService.deletePlayer(playerId);
-      console.log('Spieler erfolgreich gelöscht'); // Debug-Log
-      await loadPlayers(); // Liste neu laden
+      // Refresh the players list after successful deletion
+      const updatedPlayers = await playerService.getAllPlayers();
+      setPlayers(updatedPlayers);
+      toast.success('Spieler erfolgreich gelöscht');
     } catch (error) {
-      console.error('Fehler beim Löschen des Spielers:', error);
-      throw error;
+      console.error('Error deleting player:', error);
+      toast.error(error instanceof Error ? error.message : 'Fehler beim Löschen des Spielers');
     }
   };
 

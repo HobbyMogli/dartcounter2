@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "server": "ts-node --project tsconfig.server.json server/index.ts",
+    "server": "node --loader ts-node/esm --no-warnings server/index.ts",
     "dev:all": "concurrently \"npm run dev\" \"npm run server\" \"npx prisma studio\"",
     "build": "tsc && vite build",
     "lint": "eslint src --ext ts,tsx --report-unused-disable-directives --max-warnings 0",

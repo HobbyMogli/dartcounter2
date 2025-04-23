@@ -30,7 +30,8 @@ const DeletePlayerModal: React.FC<DeletePlayerModalProps> = ({ isOpen, onClose, 
       await onDelete(player.id);
       onClose();
     } catch (err) {
-      setError('Fehler beim Löschen des Spielers');
+      console.error('Delete player error:', err);
+      setError(err instanceof Error ? err.message : 'Fehler beim Löschen des Spielers');
     } finally {
       setIsSubmitting(false);
     }

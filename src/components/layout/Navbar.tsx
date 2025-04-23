@@ -20,7 +20,7 @@ const Navbar: React.FC<NavbarProps> = ({ onOpenSettings }) => {
           <div className="w-1/2 text-center">
             <Link
               to="/"
-              className="text-neon-blue text-4xl font-bold hover:text-shadow-glow-blue transition-all duration-300"
+              className="text-neon-blue text-4xl font-bold hover:text-shadow-glow-blue transition-all duration-300 whitespace-nowrap"
             >
               Howizzers Dart Counter
             </Link>

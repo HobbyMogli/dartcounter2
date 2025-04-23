@@ -103,20 +103,26 @@ export const gameService = {
   },
 
   // Spiel beenden
-  async endGame(gameId: number, finalScore: number) {
+  async endGame(gameId: number, winnerId: number, winningThrowId: number) {
+    console.log('Ending game with:', { gameId, winnerId, winningThrowId });
+    
     const response = await fetch(`${API_URL}/games/${gameId}/end`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        finalScore
+        winnerId,
+        winningThrowId
       })
     });
-    
+
     if (!response.ok) {
-      throw new Error('Failed to end game');
+      const errorData = await response.json();
+      console.error('End game error response:', errorData);
+      throw new Error(`Failed to end game: ${errorData.details || errorData.error}`);
     }
+
     return response.json();
   },
 
