@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useLocation, Navigate } from 'react-router-dom';
+import { useLocation, Navigate, useParams } from 'react-router-dom';
 import type { GameSetupData, X01Settings } from '../types/gameTypes';
 import PlayerScoreCard from '../components/game/PlayerScoreCard';
 import { SettingsModal } from '../components/game-settings/SettingsModal';
@@ -33,6 +33,7 @@ export interface PlayerGameState extends Player {
   lastThrows: (ThrowDisplayData | null)[];
   gameStats: GameStatistics;
   currentDart: number; // Track dart number per player
+  position: number; // Add position property for sorting players
 }
 
 // Define game action log entry structure
@@ -51,8 +52,12 @@ interface GameLogEntry {
 }
 
 const GameHost: React.FC = () => {
+  // Get gameId from URL params if available
+  const { gameId: urlGameId } = useParams<{ gameId: string }>();
+  
   const location = useLocation();
-  const gameData = location.state as GameSetupData;
+  const gameDataFromNav = location.state as GameSetupData;
+  const [loadedGameData, setLoadedGameData] = useState<any>(null);
   const [players, setPlayers] = useState<PlayerGameState[]>([]);
   const [activePlayerIndex, setActivePlayerIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -86,9 +91,180 @@ const GameHost: React.FC = () => {
     initialized.current = true; // Set flag that initialization has started
 
     const initializeGame = async () => {
-      if (gameData?.players) {
+      // If we have a gameId in the URL, load existing game
+      if (urlGameId) {
         try {
-          console.log("[GameHost] Starting game initialization with players:", gameData.players);
+          console.log(`[GameHost] Loading existing game with ID: ${urlGameId}`);
+          
+          // Parse the gameId from the URL
+          const parsedGameId = parseInt(urlGameId);
+          if (isNaN(parsedGameId)) {
+            setInitError("Invalid game ID in URL");
+            setIsLoading(false);
+            return;
+          }
+          
+          // Set gameId early to enable other functions
+          setGameId(parsedGameId);
+          
+          // Fetch the game data
+          const game = await gameService.getGameById(parsedGameId);
+          if (!game) {
+            setInitError("Game not found");
+            setIsLoading(false);
+            return;
+          }
+          
+          console.log("[GameHost] Loaded existing game:", game);
+          setLoadedGameData(game);
+          
+          // Get all player positions from game data
+          if (!game.players || !Array.isArray(game.players)) {
+            setInitError("Invalid game data: missing players");
+            setIsLoading(false);
+            return;
+          }
+
+          // Create player state objects for all players
+          const playerInitPromises = game.players.map(async (gamePlayer: any) => {
+            const playerId = gamePlayer.playerId;
+            
+            // Get player details
+            const playerDetails = await playerService.getPlayerById(playerId);
+            if (!playerDetails) {
+              console.error(`[GameHost] Player ${playerId} not found`);
+              return null;
+            }
+            
+            // Get player statistics for this game
+            const playerStats = await gameService.getPlayerStats(parsedGameId, playerId);
+            
+            // Get player throws to determine current state
+            const throwsResponse = await fetch(`${API_URL}/games/${parsedGameId}/player-throws/${playerId}`);
+            const throwsData = await throwsResponse.json();
+            
+            return {
+              ...playerDetails,
+              position: gamePlayer.position,
+              currentScore: game.startingScore - (playerStats?.totalPoints || 0),
+              lastThrows: throwsData?.lastThrows || [null, null, null],
+              currentDart: 1, // Will be updated after all players are loaded
+              gameStats: {
+                dartsThrown: playerStats?.dartsThrown || 0,
+                averagePerThrow: playerStats?.average || 0,
+                highestThrow: playerStats?.highestScore || 0,
+                totalPoints: playerStats?.totalPoints || 0
+              }
+            };
+          });
+
+          // Wait for all player initializations to complete
+          const initializedPlayers = (await Promise.all(playerInitPromises))
+            .filter((p): p is PlayerGameState => p !== null)
+            .sort((a, b) => a.position - b.position);
+          
+          if (initializedPlayers.length === 0) {
+            setInitError("No valid players found for this game");
+            setIsLoading(false);
+            return;
+          }
+          
+          // Set the players state
+          setPlayers(initializedPlayers);
+          
+          // Determine the current round (max round number across all players)
+          const allThrowsPromises = initializedPlayers.map(async (player) => {
+            const throwsResponse = await fetch(`${API_URL}/games/${parsedGameId}/player-throws/${player.id}`);
+            return await throwsResponse.json();
+          });
+          
+          const allThrowsData = await Promise.all(allThrowsPromises);
+          
+          // Get the highest round number from the database
+          console.log(`[GameHost] Getting max round from database for all players`);
+          const maxRoundFromDB = await gameService.getHighestRound(parsedGameId);
+          
+          console.log(`[GameHost] Highest round from DB: ${maxRoundFromDB}`);
+          
+          // Find which player is currently active and what dart they're on
+          const throwsInCurrentRound = await Promise.all(
+            initializedPlayers.map(async (player) => {
+              const response = await gameService.getPlayerThrows(parsedGameId, player.id, maxRoundFromDB);
+              const throwCount = response.lastThrows.filter((t: any) => t !== null).length;
+              return {
+                playerId: player.id,
+                position: player.position,
+                throwCount,
+                hasCompletedRound: throwCount === 3
+              };
+            })
+          );
+          
+          console.log(`[GameHost] Throws in current round ${maxRoundFromDB}:`, throwsInCurrentRound);
+          
+          // Check if all players have completed their throws in the current round
+          const allPlayersCompletedRound = throwsInCurrentRound.every(p => p.hasCompletedRound);
+          
+          console.log(`[GameHost] All players completed round ${maxRoundFromDB}? ${allPlayersCompletedRound}`);
+          
+          let nextRound, activePlayerIndex;
+          
+          if (allPlayersCompletedRound) {
+            // If all players completed the highest round, advance to the next round and use the first player
+            nextRound = maxRoundFromDB + 1;
+            
+            // Sort players by position and get the first one
+            const firstPositionPlayer = initializedPlayers.sort((a, b) => a.position - b.position)[0];
+            activePlayerIndex = initializedPlayers.findIndex(p => p.id === firstPositionPlayer.id);
+            
+            console.log(`[GameHost] All players completed round ${maxRoundFromDB}, advancing to round ${nextRound} with first player (${firstPositionPlayer.name})`);
+          } else {
+            // If not all players completed the highest round, find the first player who hasn't completed their throws
+            nextRound = maxRoundFromDB;
+            const incompletePlayer = throwsInCurrentRound.find(p => !p.hasCompletedRound);
+            
+            if (incompletePlayer) {
+              activePlayerIndex = initializedPlayers.findIndex(p => p.id === incompletePlayer.playerId);
+              console.log(`[GameHost] Found incomplete player in round ${maxRoundFromDB}: Player ${incompletePlayer.playerId} (${initializedPlayers[activePlayerIndex].name}) with ${incompletePlayer.throwCount} throws`);
+            } else {
+              // Fallback to first player if no incomplete player found
+              activePlayerIndex = 0;
+              console.log(`[GameHost] No incomplete player found in round ${maxRoundFromDB}, using first player as fallback`);
+            }
+          }
+          
+          // Set the current round
+          setCurrentRound(nextRound);
+          setActivePlayerIndex(activePlayerIndex);
+          
+          // Update the current dart for the active player
+          const currentPlayer = throwsInCurrentRound.find(p => p.playerId === initializedPlayers[activePlayerIndex].id);
+          const currentDartNumber = allPlayersCompletedRound ? 1 : ((currentPlayer?.throwCount || 0) + 1);
+          
+          // Update players with the correct dart indices
+          setPlayers(initializedPlayers.map((player, index) => {
+            if (index === activePlayerIndex) {
+              return {
+                ...player,
+                currentDart: currentDartNumber
+              };
+            }
+            return player;
+          }));
+          
+          setIsLoading(false);
+          console.log(`[GameHost] Game ${parsedGameId} loaded successfully`);
+          
+        } catch (error) {
+          console.error('[GameHost] Error loading game:', error);
+          setInitError('Error loading game: ' + (error instanceof Error ? error.message : String(error)));
+          setIsLoading(false);
+        }
+      }
+      // If we have gameData from navigation, create new game (existing flow)
+      else if (gameDataFromNav?.players) {
+        try {
+          console.log("[GameHost] Starting game initialization with players:", gameDataFromNav.players);
           
           // Load players
           const allPlayers = await playerService.getAllPlayers();
@@ -101,10 +277,11 @@ const GameHost: React.FC = () => {
           }
           
           const gamePlayers = allPlayers
-            .filter(player => gameData.players.includes(player.id.toString()))
-            .map(player => ({
+            .filter(player => gameDataFromNav.players.includes(player.id.toString()))
+            .map((player, index) => ({
               ...player,
-              currentScore: gameData.settings.startScore || 501,
+              position: index, // Add position based on array index
+              currentScore: gameDataFromNav.settings.startScore || 501,
               lastThrows: [null, null, null],
               currentDart: 1, // Initialize each player with dart 1
               gameStats: {
@@ -127,9 +304,9 @@ const GameHost: React.FC = () => {
           console.log("[GameHost] Attempting to create game..."); // Log before creation
           const game = await gameService.createGame({
             playerIds: gamePlayers.map(player => parseInt(player.id.toString())),
-            gameType: gameData.gameMode,
-            startingScore: gameData.settings.startScore || 501,
-            settings: gameData.settings
+            gameType: gameDataFromNav.gameMode,
+            startingScore: gameDataFromNav.settings.startScore || 501,
+            settings: gameDataFromNav.settings
           });
           
           if (!game || !game.id) {
@@ -139,6 +316,7 @@ const GameHost: React.FC = () => {
           }
           
           setGameId(game.id);
+          setLoadedGameData(game);
           
           // Set the players state and finish loading - only do this once
           setPlayers(gamePlayers);
@@ -153,13 +331,13 @@ const GameHost: React.FC = () => {
           setIsLoading(false);
         }
       } else {
-        setInitError("No player data provided");
+        setInitError("No game data or game ID provided");
         setIsLoading(false);
       }
     };
     
     initializeGame();
-  }, [gameData]);
+  }, [gameDataFromNav, urlGameId]);
   
   // Add a separate effect to initialize player stats and throws after all functions are defined
   useEffect(() => {
@@ -172,8 +350,8 @@ const GameHost: React.FC = () => {
         for (let i = 0; i < players.length; i++) {
           try {
             await updatePlayerStats(i);
-            // Load any existing throws for round 1
-            await updatePlayerThrowsDisplay(i, 1);
+            // Load any existing throws for the current round
+            await updatePlayerThrowsDisplay(i, currentRound);
           } catch (error) {
             console.error(`Error initializing player ${i}:`, error);
           }
@@ -184,13 +362,13 @@ const GameHost: React.FC = () => {
     initializeGameState();
   }, [gameId, isLoading, players.length]);
 
-  // Redirect if no game data is available
-  if (!gameData) {
+  // Redirect if no game data and no gameId is available
+  if (!gameDataFromNav && !urlGameId && !loadedGameData && !isLoading) {
     return <Navigate to="/" replace />;
   }
 
   if (isLoading) {
-    return <div className="text-white text-center py-8">Loading player data...</div>;
+    return <div className="text-white text-center py-8">Loading game data...</div>;
   }
 
   if (initError) {
@@ -210,7 +388,7 @@ const GameHost: React.FC = () => {
   if (!gameId) {
     return (
       <div className="text-white text-center py-8">
-        <div className="text-red-500 font-bold mb-4">Failed to create game</div>
+        <div className="text-red-500 font-bold mb-4">Failed to create or load game</div>
         <button 
           onClick={() => window.history.back()}
           className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
@@ -278,7 +456,7 @@ const GameHost: React.FC = () => {
       } = await gameService.getPlayerStats(gameId, parseInt(player.id.toString()));
       
       // Calculate the current remaining score based on stats
-      const initialScore = gameData.settings.startScore || 501;
+      const initialScore = loadedGameData?.startingScore || gameDataFromNav?.settings.startScore || 501;
       const remainingScore = Math.max(0, initialScore - stats.totalPoints);
       
       setPlayers(currentPlayers => {
@@ -759,6 +937,16 @@ const GameHost: React.FC = () => {
         targetNumber: targetNumber || (multiplier ? throwValue / multiplier : 0)
       });
 
+      // Add to game log - now using the isBusted parameter
+      const playerName = players.find(p => parseInt(p.id.toString()) === playerId)?.name || 'Unknown';
+      addLogEntry({
+        playerId,
+        playerName,
+        value: throwValue,
+        dartNumber,
+        isBusted // Use the isBusted parameter
+      });
+
       // If it's a winning throw, get the throw ID for the modal
       if (isWinningThrow) {
         const lastThrowId = await gameService.getLastThrowId(gameId);
@@ -793,11 +981,41 @@ const GameHost: React.FC = () => {
     });
   };
 
+  // Get the current game mode and settings
+  const getGameMode = (): string => {
+    if (loadedGameData) {
+      return loadedGameData.gameType;
+    }
+    return gameDataFromNav?.gameMode || "unknown";
+  };
+
+  // Get the current game settings
+  const getGameSettings = () => {
+    if (loadedGameData) {
+      // Check if settings is a string (that needs parsing) or already an object
+      if (typeof loadedGameData.settings === 'string') {
+        try {
+          return JSON.parse(loadedGameData.settings);
+        } catch (error) {
+          console.error('[GameHost] Error parsing game settings:', error);
+          return {}; // Return empty object as fallback
+        }
+      } else {
+        // Settings is already an object
+        return loadedGameData.settings || {};
+      }
+    }
+    return gameDataFromNav?.settings || {};
+  };
+
   // Determine what game component to render based on game mode
   const renderGameComponent = () => {
+    const gameMode = getGameMode();
+    const gameSettings = getGameSettings();
+    
     const commonProps = {
       gameId: gameId!,
-      settings: gameData.settings,
+      settings: gameSettings,
       players,
       activePlayerIndex,
       currentRound,
@@ -809,12 +1027,12 @@ const GameHost: React.FC = () => {
       updateRoundAndDart
     };
 
-    switch (gameData.gameMode) {
+    switch (gameMode) {
       case 'x01':
-        return <X01Game {...commonProps} settings={gameData.settings as X01Settings} />;
+        return <X01Game {...commonProps} settings={gameSettings as X01Settings} />;
       // Add cases for other game modes as they are implemented
       default:
-        return <div className="text-white text-center py-4">Game mode {gameData.gameMode} not yet implemented.</div>;
+        return <div className="text-white text-center py-4">Game mode {gameMode} not yet implemented.</div>;
     }
   };
 
@@ -828,7 +1046,7 @@ const GameHost: React.FC = () => {
             <div>Active Player: {players[activePlayerIndex]?.name || 'None'}</div>
             <div>Current Dart: {getCurrentDartNumber()}</div>
             <div>Current Round: {currentRound}</div>
-            <div>Game Mode: {gameData.gameMode}</div>
+            <div>Game Mode: {getGameMode()}</div>
           </div>
 
           {gameLog.length > 0 && (

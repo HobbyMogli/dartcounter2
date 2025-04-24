@@ -29,7 +29,7 @@ model Player {
   throws             Throw[]
   gamePlayers        GamePlayer[]      @relation("PlayerGamePlayers")
   statistics         PlayerStatistics?
-  wonGames           Game[]            @relation("GameWinner", fields: [id], references: [winnerId]) @filter(where: { isFinished: true })
+  wonGames           Game[]            @relation("GameWinner")
   winningDoubles     WinningDouble[] // New relation to WinningDouble model
   createdAt          DateTime          @default(now())
   updatedAt          DateTime?         @updatedAt

@@ -33,6 +33,7 @@ export const X01Settings: React.FC<X01SettingsProps> = ({ settings, onSettingsCh
             value={settings.startScore}
             onChange={(e) => handleChange('startScore', parseInt(e.target.value))}
           >
+            <option value="101">101</option>
             <option value="301">301</option>
             <option value="501">501</option>
             <option value="701">701</option>

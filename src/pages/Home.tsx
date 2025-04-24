@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/common';
 import { playerService } from '../services/db';
+import { gameService } from '../services/db/gameService';
 import Select from 'react-select';
-import type { X01Settings as IX01Settings, GameSetupData } from '../types/gameTypes';
+import type { X01Settings as IX01Settings } from '../types/gameTypes'; // Removed unused GameSetupData import
 import { X01Settings } from '../components/game-settings';
+import { toast } from 'react-hot-toast';
 
 type GameMode = 'x01' | 'cricket' | 'aroundTheWorld' | 'shanghai';
 
@@ -107,12 +109,8 @@ const Home: React.FC = () => {
   const [selectedPlayers, setSelectedPlayers] = useState<string[]>([]);
   const [x01Settings, setX01Settings] = useState<IX01Settings>(defaultX01Settings);
   const [players, setPlayers] = useState<Player[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
-
-  // Moved these calculations after useState hooks
-  const activeIndex = GAME_MODES.findIndex(m => m.id === selectedGameMode);
-  const isFirstActive = activeIndex === 0;
-  const isLastActive = activeIndex === GAME_MODES.length - 1;
 
   useEffect(() => {
     const loadPlayers = async () => {
@@ -126,27 +124,51 @@ const Home: React.FC = () => {
     loadPlayers();
   }, []);
 
-  const handleStartGame = () => {
+  const handleStartGame = async () => {
     if (selectedPlayers.length < 2) {
       alert('Bitte wähle mindestens 2 Spieler aus');
       return;
     }
 
-    const gameSetupData: GameSetupData = {
-      gameMode: selectedGameMode,
-      settings: selectedGameMode === 'x01' ? x01Settings : {},
-      players: selectedPlayers
-    };
+    setIsLoading(true);
 
-    // Navigiere zur Game-Seite mit den Einstellungen
-    navigate('/game', { state: gameSetupData });
+    try {
+      const playerIds = selectedPlayers.map(id => parseInt(id));
+      let settings = {};
+      let startingScore = 501;
+
+      if (selectedGameMode === 'x01') {
+        settings = x01Settings;
+        startingScore = x01Settings.startScore;
+      }
+
+      const game = await gameService.createGame({
+        playerIds,
+        gameType: selectedGameMode,
+        startingScore,
+        settings: JSON.stringify(settings)
+      });
+
+      navigate(`/game/${game.id}`, { 
+        state: {
+          gameMode: selectedGameMode,
+          settings: selectedGameMode === 'x01' ? x01Settings : {},
+          players: selectedPlayers
+        } 
+      });
+      
+    } catch (error) {
+      console.error('Error creating game:', error);
+      toast.error('Fehler beim Erstellen des Spiels');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const renderGameSettings = () => {
     switch (selectedGameMode) {
       case 'x01':
         return <X01Settings settings={x01Settings} onSettingsChange={setX01Settings} />;
-      // ... andere Cases für andere Spielmodi ...
       default:
         return null;
     }
@@ -154,28 +176,24 @@ const Home: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Browser-ähnliche Tab-Navigation mit Blur-Effekt */}
-      {/* Remove w-fit to allow flex container to expand */}
       <div className="relative mx-auto">
-        {/* Change from grid to flex for horizontal layout */}
         <div className="flex w-full">
           {GAME_MODES.map((mode) => (
             <div
               key={mode.id}
-              // Add flex-1 to make tabs share width equally, adjust padding/margins as needed
               className={`
                 relative
-                flex-1 // Make tabs share width
+                flex-1
                 px-4
                 py-3
                 cursor-pointer
                 select-none
                 backdrop-blur-md
                 border-x
-                border-gray-500 // Default border
+                border-gray-500
                 ${selectedGameMode === mode.id
-                  ? 'z-10 bg-dark-800/70 text-neon-blue border-t-2 border-neon-blue border-b-0 rounded-t-lg border-x-neon-blue' // Active state borders
-                  : 'z-0 bg-dark-900/50 text-gray-400 border-b-2 border-gray-500 hover:bg-dark-800/60 hover:text-gray-200' // Inactive state borders
+                  ? 'z-10 bg-dark-800/70 text-neon-blue border-t-2 border-neon-blue border-b-0 rounded-t-lg border-x-neon-blue'
+                  : 'z-0 bg-dark-900/50 text-gray-400 border-b-2 border-gray-500 hover:bg-dark-800/60 hover:text-gray-200'
                 }
                 transition-all duration-200
                 text-center
@@ -183,18 +201,12 @@ const Home: React.FC = () => {
               onClick={() => setSelectedGameMode(mode.id)}
             >
               <span className="relative z-10">{mode.title}</span>
-              {/* Removed triangle divs */}
             </div>
           ))}
         </div>
 
-        {/* Inhalt des aktiven Tabs - Adjust border to match flex layout */}
-        <div className="relative bg-dark-800/70 backdrop-blur-md p-6 border-x-2 border-b-2 border-neon-blue -mt-px"> {/* Use -mt-px to overlap border slightly */}
-          {/* Removed redundant cover-up divs */}
-          
-          
+        <div className="relative bg-dark-800/70 backdrop-blur-md p-6 border-x-2 border-b-2 border-neon-blue -mt-px">
           <div className="space-y-6">
-            {/* Spielmodus-Einstellungen */}
             <div className="space-y-4">
               <h1 className="text-2xl font-bold text-primary-100 mb-6 text-center">
                 Spieleinstellungen
@@ -202,7 +214,6 @@ const Home: React.FC = () => {
               {renderGameSettings()}
             </div>
 
-            {/* Spielerauswahl mit angepasstem Styling */}
             <div className="space-y-4">
               <h2 className="text-xl font-bold text-primary-100 mb-6 text-center">Spieler auswählen</h2>
               <Select
@@ -220,7 +231,6 @@ const Home: React.FC = () => {
                 placeholder="Spieler auswählen..."
                 noOptionsMessage={() => "Keine Spieler gefunden"}
                 styles={{
-                  // Anpassung der Select-Komponente für bessere Integration mit dem transparenten Design
                   control: (base) => ({
                     ...base,
                     backgroundColor: 'rgba(17, 24, 39, 0.7)',
@@ -243,13 +253,13 @@ const Home: React.FC = () => {
               />
             </div>
 
-            {/* Start-Button */}
             <div className="flex justify-center pt-4">
               <Button
                 variant="priority"
                 size="lg"
                 onClick={handleStartGame}
-                disabled={selectedPlayers.length < 2}
+                disabled={selectedPlayers.length < 2 || isLoading}
+                isLoading={isLoading}
                 className="min-w-[200px]"
               >
                 Spiel starten

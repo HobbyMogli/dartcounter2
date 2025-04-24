@@ -246,6 +246,26 @@ app.get('/api/players', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+// GET /api/players/:id - Get player by ID
+app.get('/api/players/:id', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const playerId = parseInt(req.params.id);
+    const player = await prisma.player.findUnique({
+      where: { id: playerId }
+    });
+
+    if (!player) {
+      res.status(404).json({ error: 'Player not found' });
+      return;
+    }
+
+    res.json(player);
+  } catch (error) {
+    console.error('Error fetching player:', error instanceof Error ? error.message : error);
+    res.status(500).json({ error: 'Could not fetch player' });
+  }
+});
+
 // POST /api/players - Neuen Spieler erstellen
 app.post('/api/players', async (req: Request, res: Response): Promise<void> => {
   try {
@@ -415,34 +435,52 @@ app.post('/api/games', async (req: Request, res: Response): Promise<void> => {
   try {
     const { playerIds, gameType, startingScore, settings } = req.body;
     
-    // Create game with explicit relations
-    const game = await prisma.game.create({
-      data: {
-        gameType,
-        startTime: new Date(),
-        startingScore,
-        settings: typeof settings === 'string' ? settings : JSON.stringify(settings),
-        isFinished: false,
-        status: 'ongoing',
-        players: {
-          create: playerIds.map((playerId: number, index: number) => ({
-            player: {
-              connect: { id: playerId }
-            },
-            position: index + 1,
-            averageScore: 0,
-            highestScore: 0,
-            checkoutPercentage: 0
-          }))
+    // Start a transaction to ensure all operations succeed or fail together
+    const game = await prisma.$transaction(async (prisma) => {
+      // First mark all existing ongoing games as abandoned
+      const updatedCount = await prisma.game.updateMany({
+        where: {
+          status: 'ongoing',
+          isFinished: false
+        },
+        data: {
+          status: 'abandoned'
         }
-      },
-      include: {
-        players: {
-          include: {
-            player: true
+      });
+      
+      console.log(`[createGame] Marked ${updatedCount.count} ongoing games as abandoned`);
+      
+      // Then create the new game with explicit relations
+      const newGame = await prisma.game.create({
+        data: {
+          gameType,
+          startTime: new Date(),
+          startingScore,
+          settings: typeof settings === 'string' ? settings : JSON.stringify(settings),
+          isFinished: false,
+          status: 'ongoing',
+          players: {
+            create: playerIds.map((playerId: number, index: number) => ({
+              player: {
+                connect: { id: playerId }
+              },
+              position: index + 1,
+              averageScore: 0,
+              highestScore: 0,
+              checkoutPercentage: 0
+            }))
+          }
+        },
+        include: {
+          players: {
+            include: {
+              player: true
+            }
           }
         }
-      }
+      });
+      
+      return newGame;
     });
 
     console.log(`Created game ${game.id} with players:`, game.players.map(gp => gp.player.name));
@@ -644,7 +682,14 @@ app.put('/api/players/:id/statistics', async (req: Request, res: Response): Prom
 app.get('/api/games/:id', (async (req: Request, res: Response): Promise<void> => {
   try {
     const game = await prisma.game.findUnique({
-      where: { id: parseInt(req.params.id) }
+      where: { id: parseInt(req.params.id) },
+      include: {
+        players: {
+          include: {
+            player: true
+          }
+        }
+      }
     });
     if (!game) {
       res.status(404).json({ error: 'Game not found' });
@@ -1171,6 +1216,46 @@ app.post('/api/games/:gameId/unmark-round-busted', async (req: Request, res: Res
   } catch (error) {
     console.error('Error restoring throws from busted state:', error instanceof Error ? error.message : error);
     res.status(500).json({ error: 'Could not restore throws from busted state' });
+  }
+});
+
+// GET /api/games/:gameId/highest-round - Get the highest round number used in a game
+app.get('/api/games/:gameId/highest-round', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const gameId = parseInt(req.params.gameId);
+    
+    if (isNaN(gameId)) {
+      res.status(400).json({ error: 'Invalid game ID' });
+      return;
+    }
+    
+    console.log(`[highest-round] Getting highest round for game ${gameId}`);
+    
+    // Find the highest round number across all throws in this game
+    const highestRound = await prisma.throw.findFirst({
+      where: {
+        gameId
+      },
+      orderBy: {
+        roundNumber: 'desc'
+      },
+      select: {
+        roundNumber: true
+      }
+    });
+    
+    console.log(`[highest-round] Found highest round: ${highestRound?.roundNumber || 1}`);
+    
+    res.json({
+      gameId,
+      highestRound: highestRound?.roundNumber || 1
+    });
+  } catch (error) {
+    console.error('Error getting highest round:', error instanceof Error ? error.message : error);
+    res.status(500).json({ 
+      error: 'Could not get highest round',
+      highestRound: 1
+    });
   }
 });
 

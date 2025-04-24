@@ -205,5 +205,23 @@ export const gameService = {
       throw new Error('Failed to restore round from busted state');
     }
     return response.json();
+  },
+
+  // Get the highest round number used in a game
+  async getHighestRound(gameId: number): Promise<number> {
+    try {
+      const response = await fetch(`${API_URL}/games/${gameId}/highest-round`);
+      
+      if (!response.ok) {
+        console.error(`Failed to get highest round for game ${gameId}: ${response.status} ${response.statusText}`);
+        return 1; // Default to round 1 if API call fails
+      }
+      
+      const data = await response.json();
+      return data.highestRound || 1;
+    } catch (error) {
+      console.error('Error getting highest round:', error instanceof Error ? error.message : error);
+      return 1; // Default to round 1 if error occurs
+    }
   }
 };
