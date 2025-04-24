@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-hot-toast';
 import { gameService } from '../../services/db/gameService';
 import { Button } from '../common'; // Import the custom Button component
 // Import icons used in PlayerScoreCard
-import { HashtagIcon, AdjustmentsHorizontalIcon, ChartBarIcon, ArrowUpIcon } from '@heroicons/react/24/outline';
+import { AdjustmentsHorizontalIcon, ChartBarIcon, ArrowUpIcon } from '@heroicons/react/24/outline';
 
 interface GameOverModalProps {
   isOpen: boolean;
@@ -19,12 +19,52 @@ interface GameOverModalProps {
       highestThrow: number;
     };
   };
-  winningThrowId: number; // Add this new prop
+  winningThrowId: number;
 }
 
 export const GameOverModal: React.FC<GameOverModalProps> = ({ isOpen, gameId, winner, winningThrowId }) => {
   const navigate = useNavigate();
   const [gameSaved, setGameSaved] = useState(false);
+  const [isStartingNewGame, setIsStartingNewGame] = useState(false);
+
+  // State to store game settings for the next game
+  const [gameSettings, setGameSettings] = useState<any>(null);
+  const [players, setPlayers] = useState<number[]>([]);
+
+  // Fetch game settings when the modal opens
+  useEffect(() => {
+    if (isOpen && gameId) {
+      fetchGameSettings();
+    }
+  }, [isOpen, gameId]);
+
+  // Fetch the game settings from the finished game
+  const fetchGameSettings = async () => {
+    try {
+      const game = await gameService.getGameById(gameId);
+      
+      if (game) {
+        console.log('[GameOverModal] Fetched game data:', game);
+        
+        // Extract game settings and player IDs
+        const settings = typeof game.settings === 'string' 
+          ? JSON.parse(game.settings) 
+          : game.settings;
+        
+        // Get player IDs from the game
+        const playerIds = game.players.map((p: any) => p.playerId);
+        
+        setGameSettings({
+          gameMode: game.gameType,
+          settings: settings
+        });
+        
+        setPlayers(playerIds);
+      }
+    } catch (error) {
+      console.error('Error fetching game settings:', error);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -46,6 +86,43 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({ isOpen, gameId, wi
     } catch (error) {
       console.error('Error saving game:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to save game');
+    }
+  };
+
+  // Start a new game with the same settings
+  const startNewGame = async () => {
+    if (!gameSettings || !players.length) {
+      toast.error('Cannot start new game: Missing game settings or players');
+      return;
+    }
+
+    setIsStartingNewGame(true);
+    
+    try {
+      console.log('[GameOverModal] Starting new game with settings:', gameSettings);
+      console.log('[GameOverModal] Players:', players);
+      
+      // Create a new game with the same settings and players
+      const newGame = await gameService.createGame({
+        playerIds: players,
+        gameType: gameSettings.gameMode,
+        startingScore: gameSettings.settings.startScore || 501,
+        settings: gameSettings.settings
+      });
+      
+      if (newGame && newGame.id) {
+        toast.success('Starting new game!');
+        
+        // Instead of just navigating, we'll do a complete page refresh to ensure
+        // all components are properly reinitialized with the new game data
+        window.location.href = `/game/${newGame.id}`;
+      } else {
+        throw new Error('Failed to create new game');
+      }
+    } catch (error) {
+      console.error('Error creating new game:', error);
+      toast.error('Failed to start new game');
+      setIsStartingNewGame(false);
     }
   };
 
@@ -109,15 +186,18 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({ isOpen, gameId, wi
         <div className="flex justify-center space-x-4">
           {/* Use custom Button component for Play Again */}
           <Button 
-            onClick={() => window.location.reload()}
+            onClick={startNewGame}
             variant="priority" // Priority for primary action
+            isLoading={isStartingNewGame}
+            disabled={isStartingNewGame}
           >
-            Play Again
+            {isStartingNewGame ? 'Starting...' : 'Play Again'}
           </Button>
           {/* Use custom Button component for Back to Menu */}
           <Button 
             onClick={() => navigate('/')}
             variant="secondary" // Secondary for navigation
+            disabled={isStartingNewGame}
           >
             Back to Menu
           </Button>
