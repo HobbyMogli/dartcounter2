@@ -7,6 +7,7 @@ interface SettingsContextType {
   showLastThrowSum: boolean;
   showThrowHistory: boolean;
   showDebugInfo: boolean;
+  showAllCheckouts: boolean; // New setting for checkout options
   updateSettings: (settings: Partial<SettingsContextType>) => void;
 }
 
@@ -17,6 +18,7 @@ const defaultSettings: SettingsContextType = {
   showLastThrowSum: true,
   showThrowHistory: true,
   showDebugInfo: false,
+  showAllCheckouts: false, // Default to false - show only checkouts possible with remaining darts
   updateSettings: () => {},
 };
 
@@ -36,4 +38,4 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   );
 };
 
-export const useSettings = () => useContext(SettingsContext); 
+export const useSettings = () => useContext(SettingsContext);

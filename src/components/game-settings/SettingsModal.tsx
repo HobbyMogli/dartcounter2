@@ -46,6 +46,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       onChange: (value: boolean) => settings.updateSettings({ showStatistics: value }),
     },
     {
+      label: 'All Possible Checkouts',
+      description: 'Show all possible checkouts, not just those doable with remaining darts',
+      value: settings.showAllCheckouts,
+      onChange: (value: boolean) => settings.updateSettings({ showAllCheckouts: value }),
+    },
+    {
       label: 'Throw History',
       description: 'Show the history of throws',
       value: settings.showThrowHistory,
@@ -115,4 +121,4 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
       </div>
     </div>
   );
-}; 
+};

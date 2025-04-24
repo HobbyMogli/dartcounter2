@@ -42,8 +42,8 @@ const Navbar: React.FC<NavbarProps> = ({ onOpenSettings }) => {
               </Link>
             )}
 
-            {/* Show Settings Icon only on Game page */}
-            {location.pathname === '/game' && onOpenSettings && (
+            {/* Show Settings Icon only on Game page - Fixed path check */}
+            {location.pathname.startsWith('/game') && onOpenSettings && (
               <button
                 onClick={onOpenSettings}
                 className="text-gray-300 hover:text-neon-blue transition-colors"

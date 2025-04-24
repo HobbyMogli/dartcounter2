@@ -83,6 +83,23 @@ const GameHost: React.FC = () => {
   // Capture initialization errors
   const [initError, setInitError] = useState<string | null>(null);
 
+  // State for checkout calculator
+  const [checkoutOptions, setCheckoutOptions] = useState<string[][]>([]);
+  const [currentCheckoutIndex, setCurrentCheckoutIndex] = useState(0);
+
+  // Add a handler for navigating through checkout options
+  const handleNavigateCheckout = (direction: 'prev' | 'next') => {
+    if (checkoutOptions.length === 0) return;
+    
+    setCurrentCheckoutIndex(prev => {
+      if (direction === 'prev') {
+        return prev === 0 ? checkoutOptions.length - 1 : prev - 1;
+      } else {
+        return prev === checkoutOptions.length - 1 ? 0 : prev + 1;
+      }
+    });
+  };
+
   useEffect(() => {
     // Check if initialization has already occurred
     if (initialized.current) {
@@ -1029,7 +1046,17 @@ const GameHost: React.FC = () => {
 
     switch (gameMode) {
       case 'x01':
-        return <X01Game {...commonProps} settings={gameSettings as X01Settings} />;
+        return (
+          <div className="flex flex-col items-center">
+            {/* Game component */}
+            <X01Game
+              {...commonProps}
+              settings={gameSettings as X01Settings}
+              // Pass function to get checkout options from X01Game
+              onCheckoutOptionsChange={setCheckoutOptions}
+            />
+          </div>
+        );
       // Add cases for other game modes as they are implemented
       default:
         return <div className="text-white text-center py-4">Game mode {gameMode} not yet implemented.</div>;
@@ -1096,6 +1123,20 @@ const GameHost: React.FC = () => {
                 showStats={settings.showStatistics}
                 showScoreSum={settings.showLastThrowSum}
                 highlightDartIndex={highlightIndex} // Pass the calculated index
+                // Pass checkout options to all players with a score <= 170
+                checkoutOptions={player.currentScore <= 170 && player.currentScore > 1 ? checkoutOptions : []}
+                currentCheckoutIndex={currentCheckoutIndex}
+                onNavigateCheckout={handleNavigateCheckout}
+                // Dynamically set the position based on player count and index
+                position={
+                  players.length <= 2
+                    ? index === 0 ? 'left' : 'right' 
+                    : index === 0 
+                      ? 'left' 
+                      : index === players.length - 1 
+                        ? 'right' 
+                        : 'center'
+                }
               />
               {/* Add 'vs.' between cards */}
               {index < players.length - 1 && (
