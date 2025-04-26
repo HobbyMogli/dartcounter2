@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '../components/common';
+import { Button, Card } from '../components/common';
 import { playerService } from '../services/db';
 import { gameService } from '../services/db/gameService';
 import Select from 'react-select';
@@ -110,15 +110,26 @@ const Home: React.FC = () => {
   const [x01Settings, setX01Settings] = useState<IX01Settings>(defaultX01Settings);
   const [players, setPlayers] = useState<Player[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [playerLoadState, setPlayerLoadState] = useState<'loading' | 'success' | 'error'>('loading');
+  const [loadError, setLoadError] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     const loadPlayers = async () => {
+      setPlayerLoadState('loading');
+      setLoadError(null);
+      
       try {
+        console.log('Starting to load players...');
         const allPlayers = await playerService.getAllPlayers();
+        console.log(`Successfully loaded ${allPlayers.length} players`);
         setPlayers(allPlayers);
+        setPlayerLoadState('success');
       } catch (error) {
-        console.error('Fehler beim Laden der Spieler:', error);
+        console.error('Error loading players:', error);
+        setLoadError(error instanceof Error ? error.message : 'Failed to load players');
+        setPlayerLoadState('error');
+        toast.error('Failed to load players');
       }
     };
     loadPlayers();
@@ -216,41 +227,96 @@ const Home: React.FC = () => {
 
             <div className="space-y-4">
               <h2 className="text-xl font-bold text-primary-100 mb-6 text-center">Spieler auswählen</h2>
-              <Select
-                isMulti
-                options={players.map(player => ({
-                  value: player.id.toString(),
-                  label: player.nickname ? `${player.name} (${player.nickname})` : player.name
-                }))}
-                onChange={(selected) => {
-                  const selectedIds = selected.map(option => option.value);
-                  setSelectedPlayers(selectedIds);
-                }}
-                className="react-select-container"
-                classNamePrefix="react-select"
-                placeholder="Spieler auswählen..."
-                noOptionsMessage={() => "Keine Spieler gefunden"}
-                styles={{
-                  control: (base) => ({
-                    ...base,
-                    backgroundColor: 'rgba(17, 24, 39, 0.7)',
-                    backdropFilter: 'blur(12px)',
-                  }),
-                  menu: (base) => ({
-                    ...base,
-                    backgroundColor: 'rgba(17, 24, 39, 0.9)',
-                    backdropFilter: 'blur(12px)',
-                  }),
-                  option: (base, state) => ({
-                    ...base,
-                    backgroundColor: state.isFocused 
-                      ? 'rgba(59, 130, 246, 0.5)' 
-                      : state.isSelected 
-                        ? 'rgba(59, 130, 246, 0.8)'
-                        : 'transparent',
-                  })
-                }}
-              />
+              
+              {playerLoadState === 'loading' && (
+                <div className="bg-dark-700/70 p-4 rounded-lg">
+                  <p className="text-center text-gray-300">Loading players...</p>
+                </div>
+              )}
+              
+              {playerLoadState === 'error' && (
+                <div>
+                  <div className="bg-red-900/50 border border-red-700 p-4 rounded-lg mb-4">
+                    <p className="text-red-300 font-medium">Error loading players</p>
+                    {loadError && <p className="text-red-400 text-sm mt-2">{loadError}</p>}
+                  </div>
+                  <div className="flex justify-center">
+                    <Button 
+                      onClick={async () => {
+                        try {
+                          setPlayerLoadState('loading');
+                          const allPlayers = await playerService.getAllPlayers();
+                          setPlayers(allPlayers);
+                          setPlayerLoadState('success');
+                        } catch (error) {
+                          console.error('Error retrying player load:', error);
+                          setLoadError(error instanceof Error ? error.message : 'Failed to load players');
+                          setPlayerLoadState('error');
+                        }
+                      }}
+                    >
+                      Retry Loading Players
+                    </Button>
+                  </div>
+                </div>
+              )}
+              
+              {playerLoadState === 'success' && (
+                <>
+                  <p className="text-sm text-green-400 mb-2">{players.length} players loaded successfully</p>
+                  <Select
+                    isMulti
+                    options={players.map(player => ({
+                      value: player.id.toString(),
+                      label: player.nickname ? `${player.name} (${player.nickname})` : player.name
+                    }))}
+                    onChange={(selected) => {
+                      const selectedIds = selected.map(option => option.value);
+                      setSelectedPlayers(selectedIds);
+                    }}
+                    className="react-select-container"
+                    classNamePrefix="react-select"
+                    placeholder="Spieler auswählen..."
+                    noOptionsMessage={() => players.length === 0 ? "No players found in database" : "No players match your search"}
+                    styles={{
+                      control: (base) => ({
+                        ...base,
+                        backgroundColor: 'rgba(17, 24, 39, 0.7)',
+                        backdropFilter: 'blur(12px)',
+                      }),
+                      menu: (base) => ({
+                        ...base,
+                        backgroundColor: 'rgba(17, 24, 39, 0.9)',
+                        backdropFilter: 'blur(12px)',
+                      }),
+                      option: (base, state) => ({
+                        ...base,
+                        backgroundColor: state.isFocused 
+                          ? 'rgba(59, 130, 246, 0.5)' 
+                          : state.isSelected 
+                            ? 'rgba(59, 130, 246, 0.8)'
+                            : 'transparent',
+                      })
+                    }}
+                  />
+                </>
+              )}
+              
+              {playerLoadState === 'success' && players.length === 0 && (
+                <Card className="border-yellow-600 bg-yellow-900/20 p-4">
+                  <p className="text-yellow-300 text-center">
+                    No players found in the database.
+                  </p>
+                  <p className="text-yellow-400 text-center text-sm mt-2">
+                    Go to the Players page to add some players first.
+                  </p>
+                  <div className="flex justify-center mt-4">
+                    <Button onClick={() => navigate('/players')} variant="secondary">
+                      Go to Players Page
+                    </Button>
+                  </div>
+                </Card>
+              )}
             </div>
 
             <div className="flex justify-center pt-4">
@@ -264,6 +330,19 @@ const Home: React.FC = () => {
               >
                 Spiel starten
               </Button>
+            </div>
+            
+            <div className="flex justify-center mt-4">
+              <a 
+                href="/api-test" 
+                className="text-sm text-neon-blue underline"
+                onClick={(e) => {
+                  e.preventDefault();
+                  navigate('/api-test');
+                }}
+              >
+                Test API Connection
+              </a>
             </div>
           </div>
         </div>

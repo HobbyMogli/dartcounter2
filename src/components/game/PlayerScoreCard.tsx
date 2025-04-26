@@ -1,8 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 // Import necessary icons
 import { HashtagIcon, AdjustmentsHorizontalIcon, ChartBarIcon, ArrowUpIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline'; 
 // Import colors for dynamic styling
 import { colors } from '../../styles/theme/colors';
+// Import special throw components
+import SpecialThrowAnimation from '../animations/SpecialThrowAnimation';
+import { useSpecialThrow } from '../../contexts/SpecialThrowContext';
+import { detectSpecialThrow } from '../../services/animations/specialThrowService';
 
 // Re-use the interface from Game.tsx or define locally
 interface ThrowDisplayData {
@@ -28,6 +32,7 @@ interface PlayerScoreCardProps {
   currentCheckoutIndex?: number;
   onNavigateCheckout?: (direction: 'prev' | 'next') => void;
   position?: 'left' | 'center' | 'right'; // Updated to include 'center' position
+  playerId?: number | string; // Add playerId for special throw identification
 }
 
 const PlayerScoreCard: React.FC<PlayerScoreCardProps> = ({
@@ -43,10 +48,54 @@ const PlayerScoreCard: React.FC<PlayerScoreCardProps> = ({
   checkoutOptions = [],
   currentCheckoutIndex = 0,
   onNavigateCheckout,
-  position = 'left' // Default to left if not specified
+  position = 'left', // Default to left if not specified
+  playerId
 }) => {
   // State to control checkout panel visibility
   const [showCheckoutPanel, setShowCheckoutPanel] = useState(false);
+  
+  // Get special throw context
+  const { activeSpecialThrows } = useSpecialThrow();
+  
+  // Track last throws for special throw detection
+  const lastThrowsRef = useRef<(ThrowDisplayData | null)[]>([]);
+  const { showSpecialThrow } = useSpecialThrow();
+
+  // Check for special throws when lastThrows changes
+  useEffect(() => {
+    // Check if all 3 throws are completed and not null
+    if (playerId && lastThrows.filter(t => t !== null).length === 3) {
+      // Check if the throws have changed from the last check
+      const lastThrowsString = JSON.stringify(lastThrows);
+      const prevThrowsString = JSON.stringify(lastThrowsRef.current);
+      
+      if (lastThrowsString !== prevThrowsString) {
+        // Create a compatible array for detectSpecialThrow
+        const throwsForDetection: ({ score: number; multiplier: number } | null)[] = 
+          lastThrows.map(t => t === null ? null : { score: t.score, multiplier: t.multiplier });
+        
+        // Detect special throw with properly typed array
+        const specialThrow = detectSpecialThrow(
+          throwsForDetection.filter((t): t is { score: number; multiplier: number } => t !== null),
+          currentScore
+        );
+        
+        // Show animation if a special throw is detected
+        if (specialThrow) {
+          showSpecialThrow(playerId, specialThrow);
+        }
+        
+        // Update ref with current throws
+        lastThrowsRef.current = [...lastThrows];
+      }
+    } else if (currentScore === 2) {
+      // Special case for Madhouse - detect when score reaches exactly 2
+      const specialThrow = detectSpecialThrow([], currentScore);
+      if (specialThrow && playerId) {
+        showSpecialThrow(playerId, specialThrow);
+      }
+    }
+  }, [lastThrows, currentScore, playerId, showSpecialThrow]);
   
   // Add console logs for debugging
   console.log(`[PlayerScoreCard ${playerName}] Props received:`, { statistics, lastThrows, highlightDartIndex });
@@ -94,6 +143,13 @@ const PlayerScoreCard: React.FC<PlayerScoreCardProps> = ({
   // Check if we have checkout options to display
   const hasCheckoutOptions = checkoutOptions.length > 0;
 
+  // Automatically open checkout panel when player becomes active and has checkout options
+  useEffect(() => {
+    if (isActive && hasCheckoutOptions) {
+      setShowCheckoutPanel(true);
+    }
+  }, [isActive, hasCheckoutOptions]);
+
   // Toggle checkout panel visibility
   const toggleCheckoutPanel = () => {
     if (hasCheckoutOptions) {
@@ -109,7 +165,7 @@ const PlayerScoreCard: React.FC<PlayerScoreCardProps> = ({
   };
 
   // Define panel width constant - maximum 170px as specified
-  const PANEL_WIDTH = 200;
+  const PANEL_WIDTH = 190;
 
   // Set fixed width for scorecard
   const SCORECARD_WIDTH = 224; // 56px * 4 = 224px (standard scorecard width)
@@ -144,11 +200,23 @@ const PlayerScoreCard: React.FC<PlayerScoreCardProps> = ({
     };
   };
 
+  // Special throw animation for this player
+  const specialThrow = playerId ? activeSpecialThrows.get(playerId) : undefined;
+
   return (
     <div 
       className="flex items-start relative"
       style={getContainerStyle()}
     >
+      {/* Special Throw Animation - Only shown if playerId is defined and there's an active special throw */}
+      {specialThrow && playerId && (
+        <SpecialThrowAnimation 
+          specialThrow={specialThrow} 
+          position="top"
+          size="medium"
+        />
+      )}
+    
       {/* Checkout Panel - Left Side - Only shown if position is left */}
       {position === 'left' && hasCheckoutOptions && (
         <div 

@@ -7,7 +7,7 @@ import { playerService } from '../services/db';
 import { gameService } from '../services/db/gameService';
 import { Player } from '../services/db/types';
 import { useSettings } from '../contexts/SettingsContext';
-import { X01Game } from '../components/game/X01Game';
+import { X01Game, PlayerCheckoutOptions } from '../components/game/X01Game';
 import { toast } from 'react-hot-toast';
 import { GameOverModal } from '../components/game/GameOverModal';
 
@@ -84,20 +84,39 @@ const GameHost: React.FC = () => {
   const [initError, setInitError] = useState<string | null>(null);
 
   // State for checkout calculator
-  const [checkoutOptions, setCheckoutOptions] = useState<string[][]>([]);
-  const [currentCheckoutIndex, setCurrentCheckoutIndex] = useState(0);
+  const [playerCheckoutOptions, setPlayerCheckoutOptions] = useState<PlayerCheckoutOptions[]>([]);
+  const [checkoutIndices, setCheckoutIndices] = useState<{ [playerId: number]: number }>({});
 
-  // Add a handler for navigating through checkout options
-  const handleNavigateCheckout = (direction: 'prev' | 'next') => {
-    if (checkoutOptions.length === 0) return;
+  // Handle X01-specific checkout options update
+  const handleCheckoutOptionsUpdate = (playerOptions: PlayerCheckoutOptions[]) => {
+    setPlayerCheckoutOptions(playerOptions);
+  };
+
+  // Handler for navigating through checkout options
+  const handleNavigateCheckout = (direction: 'next' | 'prev', playerId: number) => {
+    const playerOptions = playerCheckoutOptions.find(p => p.playerId === playerId);
+    if (!playerOptions || playerOptions.checkoutOptions.length <= 1) return;
+
+    const numOptions = playerOptions.checkoutOptions.length;
+    const currentIndex = checkoutIndices[playerId] || 0;
     
-    setCurrentCheckoutIndex(prev => {
-      if (direction === 'prev') {
-        return prev === 0 ? checkoutOptions.length - 1 : prev - 1;
-      } else {
-        return prev === checkoutOptions.length - 1 ? 0 : prev + 1;
-      }
-    });
+    let newIndex = currentIndex;
+    if (direction === 'next') {
+      newIndex = (currentIndex + 1) % numOptions;
+    } else {
+      newIndex = (currentIndex - 1 + numOptions) % numOptions;
+    }
+    
+    setCheckoutIndices(prev => ({
+      ...prev,
+      [playerId]: newIndex
+    }));
+  };
+
+  // Get checkout options for a specific player
+  const getPlayerCheckoutOptions = (playerId: number): string[][] => {
+    const playerOption = playerCheckoutOptions.find(p => p.playerId === playerId);
+    return playerOption?.checkoutOptions || [];
   };
 
   useEffect(() => {
@@ -195,7 +214,8 @@ const GameHost: React.FC = () => {
             return await throwsResponse.json();
           });
           
-          const allThrowsData = await Promise.all(allThrowsPromises);
+          // Remove unused allThrowsData declaration
+          await Promise.all(allThrowsPromises);
           
           // Get the highest round number from the database
           console.log(`[GameHost] Getting max round from database for all players`);
@@ -1053,7 +1073,7 @@ const GameHost: React.FC = () => {
               {...commonProps}
               settings={gameSettings as X01Settings}
               // Pass function to get checkout options from X01Game
-              onCheckoutOptionsChange={setCheckoutOptions}
+              onCheckoutOptionsChange={handleCheckoutOptionsUpdate}
             />
           </div>
         );
@@ -1124,9 +1144,10 @@ const GameHost: React.FC = () => {
                 showScoreSum={settings.showLastThrowSum}
                 highlightDartIndex={highlightIndex} // Pass the calculated index
                 // Pass checkout options to all players with a score <= 170
-                checkoutOptions={player.currentScore <= 170 && player.currentScore > 1 ? checkoutOptions : []}
-                currentCheckoutIndex={currentCheckoutIndex}
-                onNavigateCheckout={handleNavigateCheckout}
+                checkoutOptions={getPlayerCheckoutOptions(player.id)}
+                currentCheckoutIndex={checkoutIndices[player.id] || 0}
+                onNavigateCheckout={(direction) => handleNavigateCheckout(direction, player.id)}
+                playerId={player.id}
                 // Dynamically set the position based on player count and index
                 position={
                   players.length <= 2

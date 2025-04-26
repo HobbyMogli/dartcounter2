@@ -34,11 +34,41 @@ export const playerService: PlayerService = {
 
   // Alle Spieler abrufen
   async getAllPlayers(): Promise<Player[]> {
-    const response = await fetch(`${API_URL}/players`);
-    if (!response.ok) {
-      throw new Error('Failed to fetch players');
+    console.log('Fetching all players from:', `${API_URL}/players`);
+    try {
+      const response = await fetch(`${API_URL}/players`);
+      console.log('getAllPlayers response status:', response.status);
+      
+      if (!response.ok) {
+        console.error('Error fetching players:', response.status, response.statusText);
+        throw new Error(`Failed to fetch players: ${response.status} ${response.statusText}`);
+      }
+      
+      // First get the raw text to debug any JSON parsing issues
+      const rawText = await response.text();
+      
+      try {
+        // Then parse it manually
+        console.log('Raw player response preview:', rawText.substring(0, 200) + '...');
+        const players = JSON.parse(rawText);
+        
+        // Validate the data structure we received
+        if (!Array.isArray(players)) {
+          console.error('Players API did not return an array:', players);
+          throw new Error('Invalid player data format');
+        }
+        
+        console.log(`Successfully loaded ${players.length} players`);
+        return players;
+      } catch (parseError) {
+        console.error('JSON parse error:', parseError);
+        console.error('Raw response was:', rawText);
+        throw new Error('Failed to parse player data');
+      }
+    } catch (error) {
+      console.error('Exception in getAllPlayers:', error);
+      throw error;
     }
-    return response.json();
   },
 
   // Spieler nach ID finden

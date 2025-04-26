@@ -12,7 +12,7 @@ const prisma = new PrismaClient();
 const port = 3001; // Behalten Sie 3001 für den API-Server
 
 app.use(cors({
-  origin: 'http://localhost:5173', // Explicitly allow the frontend origin
+  origin: '*', // Allow connections from any origin - for development only
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type'], // Specify allowed headers if needed, Content-Type is common
   credentials: false
@@ -1259,6 +1259,7 @@ app.get('/api/games/:gameId/highest-round', async (req: Request, res: Response):
   }
 });
 
-app.listen(port, () => {
+app.listen(port, '0.0.0.0', () => {
   console.log(`Server running on port ${port}`);
+  console.log(`Access the API at http://<your-ip-address>:${port}`);
 });

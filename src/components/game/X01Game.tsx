@@ -4,6 +4,8 @@ import { toast } from 'react-hot-toast';
 import { PlayerGameState } from '../../pages/GameHost';
 import { X01Settings } from '../../types/gameTypes';
 import { useSettings } from '../../contexts/SettingsContext';
+import { useSpecialThrow } from '../../contexts/SpecialThrowContext';
+import { detectSpecialThrow } from '../../services/animations/specialThrowService';
 
 // Types for checkout calculator
 type SegmentType = 'S' | 'D' | 'T';
@@ -17,6 +19,12 @@ type CheckoutRule = 'Single-Out' | 'Double-Out' | 'Triple-Out';
 
 // Score below which checkouts are possible
 const MAX_CHECKOUT_SCORE = 170;
+
+// Define interface for player-specific checkout options
+export interface PlayerCheckoutOptions {
+  playerId: number;
+  checkoutOptions: string[][];
+}
 
 interface X01GameProps {
   gameId: number;
@@ -49,7 +57,7 @@ interface X01GameProps {
   onPlayerSwitch: (nextPlayerIndex: number, nextRound: number) => Promise<void>;
   onGameOver: (winnerIndex: number) => Promise<void>;
   updateRoundAndDart: (playerIndex: number, dartNumber: number) => boolean;
-  onCheckoutOptionsChange?: (options: string[][]) => void;
+  onCheckoutOptionsChange?: (allPlayersOptions: PlayerCheckoutOptions[]) => void;
 }
 
 export const X01Game: React.FC<X01GameProps> = ({
@@ -67,10 +75,7 @@ export const X01Game: React.FC<X01GameProps> = ({
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const appSettings = useSettings(); // Get global settings
-
-  // Checkout calculator state
-  const [checkoutOptions, setCheckoutOptions] = useState<string[][]>([]);
-  const [currentCheckoutIndex, setCurrentCheckoutIndex] = useState(0);
+  const { showSpecialThrow } = useSpecialThrow(); // Get special throw context
 
   // Erzeuge alle möglichen Segmente
   const makeThrows = (): ThrowOption[] => {
@@ -138,44 +143,9 @@ export const X01Game: React.FC<X01GameProps> = ({
     return results;
   };
 
-  // Navigate through checkout options
-  const navigateCheckout = (direction: 'prev' | 'next') => {
-    if (checkoutOptions.length === 0) return;
-    
-    if (direction === 'prev') {
-      setCurrentCheckoutIndex(prev => 
-        prev === 0 ? checkoutOptions.length - 1 : prev - 1);
-    } else {
-      setCurrentCheckoutIndex(prev => 
-        prev === checkoutOptions.length - 1 ? 0 : prev + 1);
-    }
-  };
-
-  // Handle keyboard navigation for checkouts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (checkoutOptions.length === 0) return;
-      
-      if (e.key === 'ArrowLeft') {
-        navigateCheckout('prev');
-      } else if (e.key === 'ArrowRight') {
-        navigateCheckout('next');
-      }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [checkoutOptions.length, currentCheckoutIndex]);
-
-  // Update checkout options when player score changes
-  useEffect(() => {
-    if (!players[activePlayerIndex]) return;
-    
-    const currentPlayer = players[activePlayerIndex];
-    const playerScore = currentPlayer.currentScore;
-    const dartsLeftToThrow = 4 - currentPlayer.currentDart; // Assuming darts are 1-indexed and max is 3
+  // Helper function to calculate checkout options for a player
+  const calculatePlayerCheckouts = (player: PlayerGameState, dartsLeft: number): string[][] => {
+    const playerScore = player.currentScore;
     
     if (playerScore <= MAX_CHECKOUT_SCORE && playerScore > 1) {
       const finishRule: CheckoutRule = 
@@ -188,20 +158,20 @@ export const X01Game: React.FC<X01GameProps> = ({
       
       // Only filter based on available darts if we're not showing all checkouts
       if (!appSettings.showAllCheckouts) {
-        // Filter checkout options based on number of darts left
+        // Filter checkout options based on number of darts left for this player
         filteredOptions = options.filter(checkout => {
           // Only show checkouts that are possible with the darts left
-          if (checkout.length > dartsLeftToThrow) {
+          if (checkout.length > dartsLeft) {
             return false;
           }
           
           // Show only 1-dart finishes when 1 dart left
-          if (dartsLeftToThrow === 1) {
+          if (dartsLeft === 1) {
             return checkout.length === 1;
           }
           
           // Show only 1 and 2-dart finishes when 2 darts left
-          if (dartsLeftToThrow === 2) {
+          if (dartsLeft === 2) {
             return checkout.length <= 2;
           }
           
@@ -213,21 +183,41 @@ export const X01Game: React.FC<X01GameProps> = ({
       // Sort checkouts by length (fewer darts first)
       filteredOptions.sort((a, b) => a.length - b.length);
       
-      setCheckoutOptions(filteredOptions);
-      setCurrentCheckoutIndex(0);
-      
-      // Pass checkout options to the parent component if handler exists
-      if (onCheckoutOptionsChange) {
-        onCheckoutOptionsChange(filteredOptions);
-      }
-    } else {
-      setCheckoutOptions([]);
-      // Pass empty options to the parent component if handler exists
-      if (onCheckoutOptionsChange) {
-        onCheckoutOptionsChange([]);
-      }
+      return filteredOptions;
     }
-  }, [players, activePlayerIndex, settings.checkOut, onCheckoutOptionsChange, appSettings.showAllCheckouts]);
+    
+    return [];
+  };
+
+  // Update checkout options for all players
+  useEffect(() => {
+    if (!players.length) return;
+    
+    // Calculate checkout options for each player
+    const allPlayersOptions: PlayerCheckoutOptions[] = players.map(player => {
+      // For all players, calculate checkout options using their current score
+      // Always use 3 darts for non-active players to show all possible checkouts for next round
+      const dartsLeft = player.id === players[activePlayerIndex].id ? 
+        (player.currentDart > 3 ? 3 : (4 - player.currentDart)) : 
+        3; // Always 3 darts for non-active players for next turn planning
+      
+      return {
+        playerId: player.id,
+        checkoutOptions: calculatePlayerCheckouts(player, dartsLeft)
+      };
+    });
+    
+    // Pass all player checkout options to the parent component
+    if (onCheckoutOptionsChange) {
+      onCheckoutOptionsChange(allPlayersOptions);
+    }
+  }, [
+    players, // Recalculate when any player's data changes
+    settings.checkOut, // Recalculate when checkout rule changes
+    onCheckoutOptionsChange, 
+    appSettings.showAllCheckouts,
+    activePlayerIndex // Recalculate when active player changes
+  ]);
 
   // Handle scoring in X01
   const handleThrow = async (score: number, multiplier: number, targetNumber?: number, isBull?: boolean) => {
@@ -241,84 +231,46 @@ export const X01Game: React.FC<X01GameProps> = ({
       const newScore = currentPlayer.currentScore - throwValue;
 
       // X01-specific validation checks
-      
-      // Case 1: Double-Out and remaining score less than 2 (impossible to checkout)
-      if (currentPlayer.currentScore < 2 && settings.checkOut === 'double') {
-        console.log(`Impossible checkout: Player ${currentPlayer.name} has score less than 2 with double-out rule.`);
-        toast.error(`Bust! Score less than 2 cannot be checked out with a double.`);
-        
-        await onBust(
-          parseInt(currentPlayer.id.toString()), 
-          currentPlayer.name,
-          throwValue, 
-          multiplier, 
-          dartNumber, 
-          currentRound, 
-          targetNumber, 
-          isBull
-        );
-        return;
-      }
-      
-      // Case 2: Triple-Out and remaining score less than 3 (impossible to checkout)
-      if (currentPlayer.currentScore < 3 && settings.checkOut === 'triple') {
-        console.log(`Impossible checkout: Player ${currentPlayer.name} has score less than 3 with triple-out rule.`);
-        toast.error(`Bust! Score less than 3 cannot be checked out with a triple.`);
-        
-        await onBust(
-          parseInt(currentPlayer.id.toString()), 
-          currentPlayer.name,
-          throwValue, 
-          multiplier, 
-          dartNumber, 
-          currentRound, 
-          targetNumber, 
-          isBull
-        );
-        return;
-      }
-      
-      // Check if the throw would leave the player with an impossible checkout
-      // Case 1: Double-Out and new score would be less than 2 but not 0 (impossible to checkout)
-      if (newScore > 0 && newScore < 2 && settings.checkOut === 'double') {
-        console.log(`Throw would cause impossible checkout: Player ${currentPlayer.name} would have score ${newScore} with double-out rule.`);
-        toast.error(`Bust! Score of ${newScore} cannot be checked out with a double.`);
-        
-        await onBust(
-          parseInt(currentPlayer.id.toString()), 
-          currentPlayer.name,
-          throwValue, 
-          multiplier, 
-          dartNumber, 
-          currentRound, 
-          targetNumber, 
-          isBull
-        );
-        return;
-      }
-      
-      // Case 2: Triple-Out and new score would be less than 3 but not 0 (impossible to checkout)
-      if (newScore > 0 && newScore < 3 && settings.checkOut === 'triple') {
-        console.log(`Throw would cause impossible checkout: Player ${currentPlayer.name} would have score ${newScore} with triple-out rule.`);
-        toast.error(`Bust! Score of ${newScore} cannot be checked out with a triple.`);
-        
-        await onBust(
-          parseInt(currentPlayer.id.toString()), 
-          currentPlayer.name,
-          throwValue, 
-          multiplier, 
-          dartNumber, 
-          currentRound, 
-          targetNumber, 
-          isBull
-        );
-        return;
-      }
-
-      // Handle bust for scores that would go below 0
       if (newScore < 0) {
-        console.log(`Bust! Player ${currentPlayer.name}'s score would go below 0.`);
-        toast.error("Bust! Score would go below zero.");
+        console.log('Score would go below zero, marking as bust');
+        toast.error('Bust! Score cannot go below zero.');
+        
+        await onBust(
+          parseInt(currentPlayer.id.toString()), 
+          currentPlayer.name,
+          throwValue, 
+          multiplier, 
+          dartNumber, 
+          currentRound, 
+          targetNumber, 
+          isBull
+        );
+        return;
+      }
+      
+      // Check for impossible checkouts
+      // For double-out: can't finish with score of 1 remaining
+      if (settings.checkOut === 'double' && newScore === 1) {
+        console.log('Cannot checkout with score of 1 in double-out mode');
+        toast.error('Bust! Cannot finish with a score of 1.');
+        
+        await onBust(
+          parseInt(currentPlayer.id.toString()), 
+          currentPlayer.name,
+          throwValue, 
+          multiplier, 
+          dartNumber, 
+          currentRound, 
+          targetNumber, 
+          isBull
+        );
+        return;
+      }
+      
+      // For triple-out: can't finish with score of 2 remaining
+      if (settings.checkOut === 'triple' && newScore === 2) {
+        console.log('Cannot checkout with score of 2 in triple-out mode');
+        toast.error('Bust! Cannot finish with a score of 2.');
         
         await onBust(
           parseInt(currentPlayer.id.toString()), 
@@ -386,7 +338,29 @@ export const X01Game: React.FC<X01GameProps> = ({
         console.error('Failed to register throw');
         return;
       }
+
+      // Construct the current throws array for special throw detection
+      const currentThrows = [...players[activePlayerIndex].lastThrows];
+      // Add the current throw to the array at the position based on dart number (0-indexed)
+      if (dartNumber >= 1 && dartNumber <= 3) {
+        currentThrows[dartNumber - 1] = { score: throwValue, multiplier };
+      }
       
+      // Create a properly typed array for detectSpecialThrow
+      const throwsForDetection: ({ score: number; multiplier: number } | null)[] = 
+        currentThrows.map(t => t === null ? null : { score: t.score, multiplier: t.multiplier });
+      
+      // Check for special throws with properly typed array
+      const specialThrow = detectSpecialThrow(
+        throwsForDetection.filter((t): t is { score: number; multiplier: number } => t !== null),
+        newScore
+      );
+      
+      if (specialThrow && currentPlayer.id) {
+        // Show the special throw animation for this player
+        showSpecialThrow(currentPlayer.id, specialThrow);
+      }
+
       // If this was a winning throw
       if (newScore === 0) {
         toast.success(`Game Over! ${currentPlayer.name} wins!`);
